@@ -1,0 +1,28 @@
+# Python
+__pycache__/
+*.py[cod]
+*.egg-info/
+.venv/
+.pytest_cache/
+.ruff_cache/
+.mypy_cache/
+
+# Build
+build/
+dist/
+
+# Benchmarks / results
+outputs/
+results/
+*.onnx
+*.pt
+*.pth
+
+# Data (users download separately)
+/data/
+manifest/*.json
+
+# Editor
+.vscode/
+.idea/
+.DS_Store
