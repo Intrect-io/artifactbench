@@ -49,15 +49,32 @@ class ArtifactNetModel(BenchModel):
             from huggingface_hub import hf_hub_download
             self.onnx_path = hf_hub_download(repo_id=self.hf_repo, filename=self.hf_filename)
 
-        providers = []
-        if device == "cuda":
-            providers.append("CUDAExecutionProvider")
-        elif device == "mps":
-            # onnxruntime doesn't support MPS natively yet; fall back to CPU
+        # 재현성 고정 (260703 확인: CUDA cuDNN conv 알고리즘 auto-tuning이 실행마다
+        # 미세하게 다른 알고리즘을 골라 경계선 판정 트랙(hard-real)의 verdict가 뒤집힘).
+        opts = ort.SessionOptions()
+        opts.intra_op_num_threads = 1
+        opts.inter_op_num_threads = 1
+        opts.execution_mode = ort.ExecutionMode.ORT_SEQUENTIAL
+        opts.graph_optimization_level = ort.GraphOptimizationLevel.ORT_DISABLE_ALL
+        try:
+            # 지원 시 결정론적 커널 강제 (onnxruntime >= 1.16 일부 빌드)
+            opts.add_session_config_entry("session.use_deterministic_compute", "1")
+        except Exception:
             pass
-        providers.append("CPUExecutionProvider")
 
-        self.sess = ort.InferenceSession(str(self.onnx_path), providers=providers)
+        if device == "cuda":
+            cuda_opts = {
+                # HEURISTIC: 고정된 규칙으로 알고리즘 선택 (EXHAUSTIVE 기본값은
+                # 매 실행마다 GPU 상태에 따라 다른 알고리즘을 골라 비결정적).
+                "cudnn_conv_algo_search": "HEURISTIC",
+                "do_copy_in_default_stream": True,
+            }
+            providers = [("CUDAExecutionProvider", cuda_opts), "CPUExecutionProvider"]
+        else:
+            providers = ["CPUExecutionProvider"]
+
+        self.sess = ort.InferenceSession(
+            str(self.onnx_path), sess_options=opts, providers=providers)
         self.device = device
 
         # Introspect input name (older builds may differ)
@@ -79,12 +96,18 @@ class ArtifactNetModel(BenchModel):
         if len(audio_44k) < CHUNK_SAMPLES:
             audio_44k = np.pad(audio_44k, (0, CHUNK_SAMPLES - len(audio_44k)))
 
-        n_chunks = max(self.n_chunks, len(audio_44k) // CHUNK_SAMPLES)
+        # Keep benchmark latency bounded: sample a fixed number of chunks
+        # evenly across the track instead of evaluating every 4-second window.
+        n_chunks = self.n_chunks
         max_start = len(audio_44k) - CHUNK_SAMPLES
         if max_start <= 0:
             starts = [0] * n_chunks
         else:
             starts = np.linspace(0, max_start, n_chunks, dtype=np.int64)
 
-        probs = [self._forward_chunk(audio_44k[s:s + CHUNK_SAMPLES]) for s in starts]
-        return float(np.median(probs))
+        probs = np.array([
+            self._forward_chunk(audio_44k[s:s + CHUNK_SAMPLES]) for s in starts
+        ])
+        if np.isnan(probs).all():
+            return 0.5
+        return float(np.nanmedian(probs))

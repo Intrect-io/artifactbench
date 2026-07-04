@@ -28,6 +28,15 @@ catches models that hide behind mean F1.
 
 Reproduce via the **Three-way comparison** recipe below.
 
+## 8-way comparison (2026-07-04)
+
+Extends the above with five more publicly-available detectors (Deezer ISMIR
+fakeprint, FST/Mippia, AI-Music-Detection AST-60s, DeepFense EAT+Nes2Net, and a
+SpecTTTra 5s-context variant) on the v1.1 purged partition (n=2,224). ArtifactNet
+(4.2M) ranks first; parameter count does not predict F1 (a 174M model scores below
+a 3.6K-parameter logistic-regression baseline). Full table, per-model notes, and a
+reproducibility note on ONNX Runtime CUDA determinism: **[`RESULTS_8WAY.md`](RESULTS_8WAY.md)**.
+
 ## Install
 
 ```bash
