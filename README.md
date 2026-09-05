@@ -32,10 +32,26 @@ Reproduce via the **Three-way comparison** recipe below.
 
 Extends the above with five more publicly-available detectors (Deezer ISMIR
 fakeprint, FST/Mippia, AI-Music-Detection AST-60s, DeepFense EAT+Nes2Net, and a
-SpecTTTra 5s-context variant) on the v1.1 purged partition (n=2,224). ArtifactNet
-(4.2M) ranks first; parameter count does not predict F1 (a 174M model scores below
-a 3.6K-parameter logistic-regression baseline). Full table, per-model notes, and a
-reproducibility note on ONNX Runtime CUDA determinism: **[`RESULTS_8WAY.md`](RESULTS_8WAY.md)**.
+SpecTTTra 5s-context variant). All eight were scored on identical files with this
+runner at τ = 0.5; n = 2,104 (1,388 AI / 716 real — the locally-restored real set,
+see the provenance caveat in `RESULTS_8WAY.md`).
+
+| Rank | Model | Params | F1 | Precision | Recall (TPR) | FPR | Sanity FAIL |
+|---|---|---:|:---:|:---:|:---:|:---:|:---:|
+| 1 | **ArtifactNet v9.4 (public ONNX)** | **4.2M** | **0.952** | 0.932 | 97.3% | 13.8% | 8/28 |
+| 2 | AI-Music-Detection AST-60s | 90.8M | 0.840 | 0.848 | 83.1% | 28.9% | 16/28 |
+| 3 | CLAM (MoM) | 194.3M | 0.787 | 0.711 | 88.3% | 69.7% | 14/28 |
+| 4 | SpecTTTra α-120s | 18.7M | 0.777 | 0.880 | 69.5% | 18.4% | 22/28 |
+| 5 | Deezer ISMIR fakeprint LR | 3.6K | 0.754 | 0.906 | 64.6% | 13.0% | 18/28 |
+| 6 | FST (Mippia, arXiv:2601.13647) | 174.4M | 0.735 | 0.984 | 58.7% | 1.8% | 17/28 |
+| 7 | DeepFense EAT+Nes2Net | — | 0.650 | 0.589 | 72.4% | 97.8% | 11/28 |
+| 8 | SpecTTTra β-5s | 18.7M | 0.563 | 0.884 | 41.3% | 10.5% | 24/28 |
+
+Parameter count does not predict F1: a 174M model scores below a 3.6K-parameter
+logistic-regression baseline. The ArtifactNet production pipeline (v9.7 / cnn_v95,
+PyTorch — not the public ONNX export above) on the same files: F1 0.984 / TPR 98.9%
+/ FPR 4.2%, 1/28 FAIL. Per-model notes and a reproducibility note on ONNX Runtime
+CUDA determinism: **[`RESULTS_8WAY.md`](RESULTS_8WAY.md)**.
 
 ## Install
 
