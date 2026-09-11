@@ -1,0 +1,5 @@
+flatbuffers==25.12.19
+numpy==2.5.2
+onnxruntime==1.29.0
+packaging==26.3
+protobuf==7.36.1

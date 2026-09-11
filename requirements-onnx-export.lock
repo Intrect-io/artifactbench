@@ -1,0 +1,5 @@
+# Export-only overlay; base packages are recorded in export_inputs.local.json.
+ml_dtypes==0.6.0
+onnx==1.22.0
+onnx-ir==1.0.0
+onnxscript==0.7.1

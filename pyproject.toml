@@ -1,0 +1,50 @@
+[build-system]
+requires = ["setuptools>=68", "wheel"]
+build-backend = "setuptools.build_meta"
+
+[project]
+name = "artifactbench"
+version = "0.1.0"
+description = "Benchmark runner for AI-generated music detection (ArtifactNet, CLAM, SpecTTTra)"
+readme = "README.md"
+requires-python = ">=3.10"
+license = { text = "MIT" }
+authors = [{ name = "Intrect", email = "contact@intrect.io" }]
+keywords = ["audio", "benchmark", "ai-music-detection", "forensic"]
+classifiers = [
+    "License :: OSI Approved :: MIT License",
+    "Programming Language :: Python :: 3",
+    "Programming Language :: Python :: 3.10",
+    "Programming Language :: Python :: 3.11",
+    "Programming Language :: Python :: 3.12",
+    "Topic :: Multimedia :: Sound/Audio :: Analysis",
+]
+dependencies = [
+    "numpy>=1.24",
+    "torch>=2.0",
+    "torchaudio>=2.0",
+    "soundfile>=0.12",
+    "onnxruntime>=1.17",
+    "huggingface_hub>=0.25",
+    "matplotlib>=3.7",
+    "scikit-learn>=1.3",
+]
+
+[project.optional-dependencies]
+clam = ["transformers>=4.40"]
+# SpecTTTra: pip install git+https://github.com/awsaf49/sonics.git
+
+[project.urls]
+Homepage = "https://github.com/Intrect-io/artifactbench"
+Dataset  = "https://huggingface.co/datasets/intrect/artifactbench"
+Model    = "https://huggingface.co/intrect/artifactnet"
+Paper    = "https://arxiv.org/abs/2604.16254"
+
+[project.scripts]
+artifactbench = "artifactbench.bench:main"
+
+[tool.setuptools.packages.find]
+include = ["artifactbench*"]
+
+[tool.pytest.ini_options]
+markers = ["slow: loads real model weights and performs inference"]

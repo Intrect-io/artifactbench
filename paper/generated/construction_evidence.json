@@ -1,0 +1,19 @@
+{
+  "scope": "frozen construction counts, not detector performance",
+  "values": {
+    "BenchEntries": 2579,
+    "LegacyEntries": 2164,
+    "SunoEntries": 200,
+    "UdioEntries": 200,
+    "LyriaEntries": 11,
+    "StableAudioEntries": 4,
+    "RecordingGroups": 2576,
+    "DependenceClusters": 2456,
+    "NativePairs": 3
+  },
+  "input_sha256": {
+    "out/v1.2_frozen_rc2_260905/release.json": "a1b3c343ff1604826f2c4519d46036402f26ddad3b2fa41bc066e2a4e9a1bc2a",
+    "out/v1.2_frozen_rc2_260905/manifest.public.json": "feab7c4c3d037919fd784dc40e46199470088abde532c5181e34573f20dceefd",
+    "paper/generate_construction.py": "5f45e2b5faeaa5e61e9e59c0c17b07687357e1baefef2724ea6c4c4a6969db4c"
+  }
+}

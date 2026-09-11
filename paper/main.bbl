@@ -1,0 +1,152 @@
+\begin{thebibliography}{18}
+\providecommand{\natexlab}[1]{#1}
+\providecommand{\url}[1]{\texttt{#1}}
+\expandafter\ifx\csname urlstyle\endcsname\relax
+  \providecommand{\doi}[1]{doi: #1}\else
+  \providecommand{\doi}{doi: \begingroup \urlstyle{rm}\Url}\fi
+
+\bibitem[Afchar et~al.(2025)Afchar, Meseguer-Brocal, Akesbi, and
+  Hennequin]{fakeprint}
+Darius Afchar, Gabriel Meseguer-Brocal, Kamil Akesbi, and Romain Hennequin.
+\newblock A fourier explanation of {AI}-music artifacts.
+\newblock In \emph{International Society for Music Information Retrieval
+  Conference}, 2025.
+\newblock URL \url{https://arxiv.org/abs/2506.19108}.
+
+\bibitem[{AI-Music-Detection}(2026)]{ast60}
+{AI-Music-Detection}.
+\newblock ai\_music\_detection\_large\_60s.
+\newblock Hugging Face model card, 2026.
+\newblock URL
+  \url{https://huggingface.co/AI-Music-Detection/ai_music_detection_large_60s/blob/5e29461bbfc41dc5fe4ed5f7fadc961aa84a7e3e/README.md}.
+\newblock Inspected 2026-09-05; evaluated fine-tuned checkpoint revision.
+
+\bibitem[Batra et~al.(2025)Batra, Sharma, Thukral, Bhatia, Batra, and
+  Gautam]{mom}
+Arnesh Batra, Dev Sharma, Krish Thukral, Ruhani Bhatia, Naman Batra, and Aditya
+  Gautam.
+\newblock Melody or machine: Detecting synthetic music with dual-stream
+  contrastive learning.
+\newblock \emph{arXiv preprint arXiv:2512.00621}, 2025.
+\newblock URL \url{https://arxiv.org/abs/2512.00621}.
+
+\bibitem[Comanducci et~al.(2024)Comanducci, Bestagini, and
+  Tubaro]{fakemusiccaps}
+Luca Comanducci, Paolo Bestagini, and Stefano Tubaro.
+\newblock {FakeMusicCaps}: A dataset for detection and attribution of synthetic
+  music generated via text-to-music models.
+\newblock \emph{arXiv preprint arXiv:2409.10684}, 2024.
+\newblock URL \url{https://arxiv.org/abs/2409.10684}.
+
+\bibitem[{DeepFense}(2026)]{deepfense_recipe}
+{DeepFense}.
+\newblock {FakeMusicCaps EAT Nes2Net NoAug Seed42}: Checkpoint configuration.
+\newblock Hugging Face checkpoint configuration, 2026.
+\newblock URL
+  \url{https://huggingface.co/DeepFense/FakeMusicCaps_EAT_Nes2Net_NoAug_Seed42/blob/c8ec432e71e94babaa83e0ef681c24bfa540ada7/config.yaml}.
+\newblock Inspected 2026-09-05; evaluated revision, not a framework-wide
+  result.
+
+\bibitem[Defferrard et~al.(2017)Defferrard, Benzi, Vandergheynst, and
+  Bresson]{fma}
+Micha\"el Defferrard, Kirell Benzi, Pierre Vandergheynst, and Xavier Bresson.
+\newblock {FMA}: A dataset for music analysis.
+\newblock In \emph{International Society for Music Information Retrieval
+  Conference}, 2017.
+\newblock URL \url{https://arxiv.org/abs/1612.01840}.
+
+\bibitem[Evans et~al.(2026)Evans, Parker, Rice, Carr, Zukowski, Taylor, and
+  Pons]{stableaudio3}
+Zach Evans, Julian~D. Parker, Matthew Rice, CJ~Carr, Zack Zukowski, Josiah
+  Taylor, and Jordi Pons.
+\newblock Stable audio 3.
+\newblock \emph{arXiv preprint arXiv:2605.17991}, 2026.
+\newblock URL \url{https://arxiv.org/abs/2605.17991}.
+
+\bibitem[Gong et~al.(2021)Gong, Chung, and Glass]{ast}
+Yuan Gong, Yu-An Chung, and James Glass.
+\newblock {AST}: Audio spectrogram transformer.
+\newblock In \emph{Interspeech}, 2021.
+\newblock URL \url{https://arxiv.org/abs/2104.01778}.
+
+\bibitem[{Google DeepMind}(2026)]{lyria35}
+{Google DeepMind}.
+\newblock Lyria 3.5, 2026.
+\newblock URL \url{https://deepmind.google/models/lyria/}.
+\newblock Accessed 2026-09-05; official version-labelled demonstration
+  carousel.
+
+\bibitem[Gr{\"o}tschla et~al.(2025)Gr{\"o}tschla, Solak, Lanzend{\"o}rfer, and
+  Wattenhofer]{aime}
+Florian Gr{\"o}tschla, Ahmet Solak, Luca~A. Lanzend{\"o}rfer, and Roger
+  Wattenhofer.
+\newblock Benchmarking music generation models and metrics via human preference
+  studies.
+\newblock In \emph{IEEE International Conference on Acoustics, Speech and
+  Signal Processing}, 2025.
+\newblock \doi{10.1109/ICASSP49660.2025.10887745}.
+\newblock URL \url{https://arxiv.org/abs/2506.19085}.
+\newblock Dataset card: \url{https://huggingface.co/datasets/disco-eth/AIME},
+  accessed 2026-09-05.
+
+\bibitem[{Intrect}(2026)]{artifactnet_public_2026}
+{Intrect}.
+\newblock {ArtifactNet}: Public checkpoint repository.
+\newblock Hugging Face model repository, 2026.
+\newblock URL
+  \url{https://huggingface.co/intrect/artifactnet/tree/7c9b753a9d006b48e4bfaf85bf0157e135f4aad4}.
+\newblock Inspected 2026-09-05; v9.4 ONNX assets, not the evaluated local
+  checkpoint stack.
+
+\bibitem[Kheir et~al.(2026)Kheir, Das, Xiao, Wang, Kallel, Erdogan, Vu,
+  Polzehl, and Moeller]{deepfense}
+Yassine~El Kheir, Arnab Das, Yixuan Xiao, Xin Wang, Feidi Kallel, Enes~Erdem
+  Erdogan, Ngoc~Thang Vu, Tim Polzehl, and Sebastian Moeller.
+\newblock {DeepFense}: A unified, modular, and extensible framework for robust
+  deepfake audio detection.
+\newblock \emph{arXiv preprint arXiv:2604.08450}, 2026.
+\newblock URL \url{https://arxiv.org/abs/2604.08450}.
+
+\bibitem[Kim and Go(2026)]{fst}
+Yumin Kim and Seonghyeon Go.
+\newblock Fusion segment transformer: Bi-directional attention guided fusion
+  network for {AI}-generated music detection.
+\newblock \emph{arXiv preprint arXiv:2601.13647}, 2026.
+\newblock URL \url{https://arxiv.org/abs/2601.13647}.
+
+\bibitem[{lofcz}(2026)]{lofcz}
+{lofcz}.
+\newblock {AI} music detector.
+\newblock Hugging Face model card, 2026.
+\newblock URL
+  \url{https://huggingface.co/lofcz/ai-music-detector/blob/d2180598fed79e3f917e8050a00439982466e5c6/README.md}.
+\newblock Accessed 2026-09-05; third-party fakeprint logistic-regression
+  checkpoint.
+
+\bibitem[Oh(2026)]{artifactnet}
+Heewon Oh.
+\newblock {ArtifactNet}: Detecting {AI}-generated music via forensic residual
+  physics.
+\newblock \emph{arXiv preprint arXiv:2604.16254}, 2026.
+\newblock URL \url{https://arxiv.org/abs/2604.16254}.
+
+\bibitem[Rahman et~al.(2025)Rahman, Hakim, Sarker, Paul, and Fattah]{sonics}
+Md~Awsafur Rahman, Zaber Ibn~Abdul Hakim, Najibul~Haque Sarker, Bishmoy Paul,
+  and Shaikh~Anowarul Fattah.
+\newblock {SONICS}: Synthetic or not---identifying counterfeit songs.
+\newblock In \emph{International Conference on Learning Representations}, 2025.
+\newblock URL \url{https://arxiv.org/abs/2408.14080}.
+
+\bibitem[{Stability AI}(2026)]{stableaudiodemo}
+{Stability AI}.
+\newblock Stable audio 3.0, 2026.
+\newblock URL \url{https://stability.ai/stable-audio}.
+\newblock Accessed 2026-09-05; demonstration model size not specified.
+
+\bibitem[{Suno}(2026)]{suno55}
+{Suno}.
+\newblock Suno v5.5: More expressive. more you., March 2026.
+\newblock URL \url{https://suno.com/blog/v5-5}.
+\newblock Published 2026-03-26; accessed 2026-09-05.
+
+\end{thebibliography}

@@ -1,0 +1,16 @@
+{
+  "status": "historical pilot only; not v1.2 results",
+  "expected": 2164,
+  "scored": 2163,
+  "auc": 0.9991173746435901,
+  "codec_n": 50,
+  "codec_mean": 0.2024399542326432,
+  "codec_median": 0.007423164189213074,
+  "codec_max": 0.8901062394527899,
+  "input_hashes": {
+    "out/current_production_260905_recovered/rows.jsonl": "cdfa17b33ab45fc36d7274d323ab6e2a7b2f6fe0d7ac5edf12f604f4605059df",
+    "out/current_production_260905_recovered/summary.json": "8115ef402351394c6febbcbecaf1292171b7c110401b6228d7ce3cddde8520c5",
+    "out/current_production_260905_recovered/codec_pair.json": "e8fc371e2f2f9068a2bc57ed7cb680ac983cb5a2d250ec811eac5a6060bbbe3c",
+    "paper/generate_historical.py": "ab9d3fd5f4b5fa1235bd7b8922bdc267d10bf563ac97f5138cad8193c10d0719"
+  }
+}

@@ -1,0 +1,16 @@
+{
+  "attempted_per_model": 2579,
+  "output_sha256": {
+    "ai_source_rates.pdf": "c1de70d93e3ad1f1e4b377d7c924f5bdcd8906ba3c1b56c689173e7cad1fd96f",
+    "all_metrics.csv": "454af6f561613f08d7616d941e213ed42ee1d43ce8f3d13151a083954a3826b3",
+    "demo_table.tex": "7a7b1edf6bbe5bc958fd4358aeaef56d5b72fc6b83f4b4439ed08c470e99eb6f",
+    "legacy_table.tex": "5d9810374f596e383cefc7c41deddffa7291eafd52b4c125733ee4b3a972657c",
+    "native_table.tex": "cae915c6e3c2c17bdbe57f685ce57574fc2a920eb4a7a79d98065343cdf218db",
+    "native_tpr.pdf": "c1c56dec9e9b0e52f12e0d59ffb08bfc22a5f1a458ec05b5fc3ea89c5baadb61",
+    "non_demo_recording_representative_table.tex": "1d172a7dafce3922066383d7ee4896613061268db7a6a1b4cdf106a376c55084",
+    "non_demo_table.tex": "6fdd955ad1df3fcf8acf028b21ec6acec8222f22362dc730a299f2b2e0188c3e",
+    "operating_stacks_table.tex": "a74406519c272766451b07550f153eb8df107cfe870b52aba0d51516f5bf6e15",
+    "real_source_rates.pdf": "4b84c671dce20b9b9905c9046291974fd5cec02b898243bde07edc6e006719f7"
+  },
+  "status": "completed results rendered"
+}

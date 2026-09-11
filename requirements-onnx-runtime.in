@@ -1,0 +1,3 @@
+# Torch-free inference of already decoded 44.1 kHz mono waveforms.
+numpy==2.5.2
+onnxruntime==1.29.0

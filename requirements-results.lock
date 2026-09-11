@@ -1,0 +1,3 @@
+# Saved-score notebook; no torch/GPU/model weights. Match measured NumPy version.
+-r requirements-notebook.lock
+numpy==2.1.3

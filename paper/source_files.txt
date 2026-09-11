@@ -1,0 +1,11 @@
+main.tex
+refs.bib
+main.bbl
+generated/construction_numbers.tex
+generated/checkpoint_numbers.tex
+generated/historical_table.tex
+generated/checkpoint_table.tex
+figures/historical_codec_cdf.pdf
+generated/full_rc2/legacy_table.tex
+generated/full_rc2/native_table.tex
+generated/full_rc2/transport_table.tex
