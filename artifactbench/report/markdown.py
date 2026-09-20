@@ -1,15 +1,17 @@
 """Markdown 리포트 생성 — 단일 모델 + 다중 모델 비교."""
 import numpy as np
+
 from ..metrics.thresholds import (
-    REAL_FPR_MAX, AI_TPR_MIN_DEFAULT, AI_TPR_MIN_SOFT,
-    CODEC_DELTA_MEAN_MAX, CODEC_DELTA_MAX_MAX,
+    AI_TPR_MIN_DEFAULT,
+    AI_TPR_MIN_SOFT,
+    REAL_FPR_MAX,
 )
 
 
 def single_model_report(model_info, per_source, codec_pairs, fails, elapsed):
     """단일 모델 sanity 리포트 생성."""
     lines = []
-    lines.append(f"# ArtifactBench v1 — {model_info['name']}")
+    lines.append(f"# ArtifactBench v2 — {model_info['name']}")
     lines.append(f"\nModel: {model_info['name']} | Params: {model_info['params']:,}")
     lines.append(f"Input: {model_info['input_sr']}Hz, {model_info['input_duration']}s")
     lines.append(f"Ref: {model_info['paper_ref']}")
@@ -72,7 +74,7 @@ def comparison_report(all_results):
     """
     models = [r["model_info"]["name"] for r in all_results]
     lines = []
-    lines.append("# ArtifactBench v1 — Comparison Report")
+    lines.append("# ArtifactBench v2 — Comparison Report")
     lines.append("")
 
     # Model specs table

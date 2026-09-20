@@ -1,10 +1,10 @@
 #!/usr/bin/env python3
-"""ArtifactBench v1 — 4모델 비교 차트 생성."""
+"""ArtifactBench v2 — 4모델 비교 차트 생성."""
 import json
-import sys
 from pathlib import Path
 
 import matplotlib
+
 matplotlib.use("Agg")
 import matplotlib.pyplot as plt
 import numpy as np
@@ -69,7 +69,7 @@ def plot_aggregate_f1(models_data, output_path):
             ax.axhline(y=0.05, color="red", linestyle="--", alpha=0.7, label="5% threshold")
             ax.legend(fontsize=8)
 
-    fig.suptitle("ArtifactBench v1 — Aggregate Performance", fontsize=16, fontweight="bold", y=1.02)
+    fig.suptitle("ArtifactBench v2 — Aggregate Performance", fontsize=16, fontweight="bold", y=1.02)
     plt.tight_layout()
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.close()
@@ -117,7 +117,7 @@ def plot_ai_tpr_heatmap(models_data, output_path):
                     color=color, fontweight="bold" if val < 0.9 else "normal")
 
     plt.colorbar(im, ax=ax, label="TPR", shrink=0.8)
-    ax.set_title("AI Source TPR by Model — ArtifactBench v1", fontsize=14, fontweight="bold")
+    ax.set_title("AI Source TPR by Model — ArtifactBench v2", fontsize=14, fontweight="bold")
     plt.tight_layout()
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.close()
@@ -162,7 +162,7 @@ def plot_real_fpr_heatmap(models_data, output_path):
                     color=color, fontweight="bold" if val > 0.05 else "normal")
 
     plt.colorbar(im, ax=ax, label="FPR (lower is better)", shrink=0.8)
-    ax.set_title("Real Source FPR by Model — ArtifactBench v1", fontsize=14, fontweight="bold")
+    ax.set_title("Real Source FPR by Model — ArtifactBench v2", fontsize=14, fontweight="bold")
     plt.tight_layout()
     plt.savefig(output_path, dpi=150, bbox_inches="tight")
     plt.close()
@@ -172,7 +172,9 @@ def plot_real_fpr_heatmap(models_data, output_path):
 def plot_fail_count(models_data, output_path):
     """모델별 FAIL 수 + params 크기 대비."""
     from artifactbench.metrics.thresholds import (
-        REAL_FPR_MAX, AI_TPR_MIN_DEFAULT, AI_TPR_MIN_SOFT,
+        AI_TPR_MIN_DEFAULT,
+        AI_TPR_MIN_SOFT,
+        REAL_FPR_MAX,
     )
 
     model_names = list(models_data.keys())
@@ -219,7 +221,7 @@ def plot_fail_count(models_data, output_path):
     ax2.set_ylim(0, 220)
     ax2.legend(loc="upper left", fontsize=10)
 
-    ax1.set_title("ArtifactBench v1 — FAIL Count vs Model Size", fontsize=14, fontweight="bold")
+    ax1.set_title("ArtifactBench v2 — FAIL Count vs Model Size", fontsize=14, fontweight="bold")
     ax1.grid(axis="y", alpha=0.3)
     plt.tight_layout()
     plt.savefig(output_path, dpi=150, bbox_inches="tight")

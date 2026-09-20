@@ -4,7 +4,7 @@ build-backend = "setuptools.build_meta"
 
 [project]
 name = "artifactbench"
-version = "0.1.0"
+version = "0.2.0"
 description = "Benchmark runner for AI-generated music detection (ArtifactNet, CLAM, SpecTTTra)"
 readme = "README.md"
 requires-python = ">=3.10"

@@ -1,4 +1,4 @@
-"""Sanity suite thresholds — ArtifactBench v1."""
+"""Legacy source-level sanity thresholds retained for runner diagnostics."""
 
 # Per-source pass/fail
 REAL_FPR_MAX = 0.05

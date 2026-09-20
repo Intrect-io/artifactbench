@@ -6,7 +6,6 @@
   3. MoM subset에서 CLAM F1 재현
 """
 import json
-from pathlib import Path
 
 import numpy as np
 
@@ -115,7 +114,7 @@ def generate_roc_plot(all_model_results, output_path):
     ax.plot([0, 1], [0, 1], "k--", alpha=0.3)
     ax.set_xlabel("False Positive Rate (Real → AI)")
     ax.set_ylabel("True Positive Rate (AI detected)")
-    ax.set_title("ROC Curve — ArtifactBench v1")
+    ax.set_title("ROC Curve — ArtifactBench v2")
     ax.legend(fontsize=8)
     ax.set_xlim(-0.02, 1.02)
     ax.set_ylim(-0.02, 1.02)
@@ -156,7 +155,7 @@ def load_track_probs_from_result(model_result):
 def generate_roc_report(all_model_results):
     """ROC 분석 markdown 리포트."""
     lines = []
-    lines.append("# ROC Analysis — ArtifactBench v1")
+    lines.append("# ROC Analysis — ArtifactBench v2")
     lines.append("")
 
     for model_result in all_model_results:
@@ -171,8 +170,8 @@ def generate_roc_report(all_model_results):
 
         lines.append(f"## {name}")
         lines.append("")
-        lines.append(f"| Metric | @τ=0.5 | @Best F1 | @FPR≤5% |")
-        lines.append(f"|---|---|---|---|")
+        lines.append("| Metric | @τ=0.5 | @Best F1 | @FPR≤5% |")
+        lines.append("|---|---|---|---|")
 
         at_05 = next((r for r in sweep if abs(r["threshold"] - 0.5) < 0.003), None)
         if at_05:

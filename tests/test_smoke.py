@@ -10,10 +10,40 @@ import pytest
 
 
 def test_imports():
+    import artifactbench
     from artifactbench.models import MODEL_REGISTRY
+
+    assert artifactbench.__version__ == "0.2.0"
     assert set(MODEL_REGISTRY.keys()) == {
         "artifactnet", "spectttra", "clam", "deezer_ismir"
     }
+
+
+def test_reports_identify_v2():
+    from artifactbench.report.markdown import comparison_report, single_model_report
+
+    model_info = {
+        "name": "dummy",
+        "params": 1,
+        "input_sr": 44100,
+        "input_duration": 1.0,
+        "paper_ref": "none",
+    }
+    single = single_model_report(model_info, {}, [], [], 0.0)
+    comparison = comparison_report(
+        [
+            {
+                "model_info": model_info,
+                "per_source": {},
+                "codec_pairs": [],
+                "fails": [],
+                "elapsed": 0.0,
+            }
+        ]
+    )
+
+    assert single.startswith("# ArtifactBench v2")
+    assert comparison.startswith("# ArtifactBench v2")
 
 
 @pytest.mark.slow

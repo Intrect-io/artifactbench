@@ -1,11 +1,17 @@
 """Sanity suite — fail-loud check + regression detection."""
 import json
-import numpy as np
 from pathlib import Path
+
+import numpy as np
+
 from .thresholds import (
-    REAL_FPR_MAX, AI_TPR_MIN_DEFAULT, AI_TPR_MIN_SOFT,
-    CODEC_DELTA_MEAN_MAX, CODEC_DELTA_MAX_MAX,
-    MASK_STD_MIN, REGRESSION_FPR_MAX_DELTA, REGRESSION_TPR_MAX_DELTA,
+    AI_TPR_MIN_DEFAULT,
+    AI_TPR_MIN_SOFT,
+    CODEC_DELTA_MAX_MAX,
+    CODEC_DELTA_MEAN_MAX,
+    REAL_FPR_MAX,
+    REGRESSION_FPR_MAX_DELTA,
+    REGRESSION_TPR_MAX_DELTA,
 )
 
 

@@ -6,7 +6,7 @@ Usage:
     python -m artifactbench.bench --model artifactnet \
         --manifest manifest.json --output out/
 
-    # Three-way comparison (CLAM requires --clam-repo + --clam-ckpt)
+    # Four-model comparison (CLAM requires --clam-repo + --clam-ckpt)
     python -m artifactbench.bench \
         --model artifactnet --model spectttra --model clam \
         --clam-repo ~/dev/MoM-CLAM \

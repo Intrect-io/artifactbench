@@ -135,6 +135,74 @@ The v2 publication protocol adds analysis scripts to the versioned release:
 Codec-pair evaluation remains available as a secondary experiment, but it is not
 mixed into the frozen 579-track primary test.
 
+### Reproduce the frozen analysis
+
+Run every adapter over the full bound manifest before analysis. The `--result`
+arguments point to runner output directories; when two models were executed in
+one run, the same directory is supplied for both model names.
+
+```bash
+python scripts/analyze_frozen_protocol.py \
+  --manifest artifactbench_v2_runtime_manifest.json \
+  --result artifactnet=results/artifactnet \
+  --result spectttra=results/spectttra-deezer \
+  --result deezer_ismir=results/spectttra-deezer \
+  --result clam=results/clam \
+  --output results/frozen-analysis \
+  --bootstrap 2000
+
+python scripts/verify_frozen_metrics.py \
+  --manifest artifactbench_v2_runtime_manifest.json \
+  --metrics results/frozen-analysis/frozen_protocol_metrics.json \
+  --result artifactnet=results/artifactnet \
+  --result spectttra=results/spectttra-deezer \
+  --result deezer_ismir=results/spectttra-deezer \
+  --result clam=results/clam \
+  --output results/frozen-analysis/independent-verification.json
+
+python scripts/render_frozen_artifacts.py \
+  --metrics results/frozen-analysis/frozen_protocol_metrics.json \
+  --output results/frozen-analysis/rendered
+```
+
+`analyze_frozen_protocol.py` selects thresholds from calibration rows only and
+then evaluates validation and test without retuning. `verify_frozen_metrics.py`
+independently repeats threshold selection and every paired point calculation.
+`render_frozen_artifacts.py` consumes only the frozen metrics JSON, preventing
+manual transcription of paper values.
+
+### Build shareable metadata and result artifacts
+
+```bash
+python scripts/build_public_results.py \
+  --manifest artifactbench_v2_runtime_manifest.json \
+  --metrics results/frozen-analysis/frozen_protocol_metrics.json \
+  --result artifactnet=results/artifactnet \
+  --result spectttra=results/spectttra-deezer \
+  --result deezer_ismir=results/spectttra-deezer \
+  --result clam=results/clam \
+  --runner-revision "$(git rev-parse HEAD)" \
+  --output release/results
+
+python scripts/audit_manifest.py \
+  release/artifactbench_v2_primary_manifest.json \
+  --output release/manifest_audit.json
+```
+
+The public-results builder remaps private track IDs, rejects private path and
+identity fields, and retains raw probabilities and structured failures. A final
+release review must still inspect free-form error text and upstream metadata.
+`build_public_release.py` is a maintainer utility for producing the
+path-free manifest from a verified private runtime manifest; its optional
+`--fma-licenses` input is the private FMA evidence file containing
+`artifactbench_track_id`, not the already-sanitized public license map.
+
+ArtifactNet's non-finite chunk investigation is reproducible with
+`audit_artifactnet_nonfinite.py` and
+`build_artifactnet_finite_chunk_result.py`. The declared primary policy requires
+at least four finite scores among seven fixed chunks; the strict any-non-finite
+result remains a separate sensitivity analysis.
+
 ## License
 
 The runner code is MIT licensed. **Model weights and datasets are subject to
