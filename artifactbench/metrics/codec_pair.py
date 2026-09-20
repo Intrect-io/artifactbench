@@ -1,8 +1,5 @@
 """Codec pair invariance 측정."""
-import random
-import numpy as np
-from ..data.manifest import load_audio_mono, encode_variant, WAV_SOURCES
-
+from ..data.manifest import WAV_SOURCES, encode_variant, load_audio_mono
 
 CODECS = ["wav", "mp3_128", "aac_128", "opus_128"]
 
@@ -19,7 +16,10 @@ def codec_pair_measure(entries, model, n_pair=50, verbose=True):
         visited += 1
         if e["source"] not in WAV_SOURCES:
             continue
-        audio = load_audio_mono(e["path"])
+        path = e.get("runtime_path", e.get("path"))
+        if not path:
+            continue
+        audio = load_audio_mono(path)
         if audio is None:
             continue
 
@@ -38,7 +38,7 @@ def codec_pair_measure(entries, model, n_pair=50, verbose=True):
         p_values = list(probs.values())
         delta = max(p_values) - min(p_values)
         results.append({
-            "path": e["path"],
+            "track_id": e["track_id"],
             "source": e["source"],
             "label": e["label"],
             "probs": probs,

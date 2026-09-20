@@ -26,10 +26,13 @@ class BenchModel(ABC):
         ...
 
     def info(self) -> dict:
-        return {
+        info = {
             "name": self.name,
             "params": self.params,
             "input_sr": self.input_sr,
             "input_duration": self.input_duration,
             "paper_ref": self.paper_ref,
         }
+        if hasattr(self, "provenance"):
+            info["provenance"] = self.provenance
+        return info

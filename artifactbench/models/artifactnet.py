@@ -5,15 +5,14 @@ The public ONNX release encapsulates the full pipeline (STFT → UNet → HPSS �
 
 HF Hub: https://huggingface.co/intrect/artifactnet (CC BY-NC 4.0)
 """
-from pathlib import Path
-
 import numpy as np
 
+from .assets import materialize_hf_onnx_bundle
 from .base import BenchModel
-
 
 DEFAULT_HF_REPO = "intrect/artifactnet"
 DEFAULT_ONNX_FILENAME = "artifactnet_v94_full.onnx"
+DEFAULT_HF_REVISION = "e915f0dc5962a57536bbe1f78b66adcb48dfae4c"
 
 CHUNK_SEC = 4.0
 SR = 44100
@@ -33,11 +32,19 @@ class ArtifactNetModel(BenchModel):
     def __init__(self, onnx_path: str | None = None,
                  hf_repo: str = DEFAULT_HF_REPO,
                  hf_filename: str = DEFAULT_ONNX_FILENAME,
+                 hf_revision: str = DEFAULT_HF_REVISION,
                  n_chunks: int = N_CHUNKS_DEFAULT):
         self.onnx_path = onnx_path
         self.hf_repo = hf_repo
         self.hf_filename = hf_filename
+        self.hf_revision = hf_revision
         self.n_chunks = n_chunks
+        self.provenance = {
+            "hf_repo": hf_repo,
+            "hf_filename": hf_filename,
+            "hf_revision": hf_revision,
+            "n_chunks": n_chunks,
+        }
         self.sess = None
         self.device = "cpu"
 
@@ -45,9 +52,9 @@ class ArtifactNetModel(BenchModel):
         import onnxruntime as ort
 
         if self.onnx_path is None:
-            # Auto-download from HF Hub
-            from huggingface_hub import hf_hub_download
-            self.onnx_path = hf_hub_download(repo_id=self.hf_repo, filename=self.hf_filename)
+            self.onnx_path = materialize_hf_onnx_bundle(
+                self.hf_repo, self.hf_filename, self.hf_revision
+            )
 
         providers = []
         if device == "cuda":
@@ -79,7 +86,9 @@ class ArtifactNetModel(BenchModel):
         if len(audio_44k) < CHUNK_SAMPLES:
             audio_44k = np.pad(audio_44k, (0, CHUNK_SAMPLES - len(audio_44k)))
 
-        n_chunks = max(self.n_chunks, len(audio_44k) // CHUNK_SAMPLES)
+        if self.n_chunks <= 0:
+            raise ValueError("n_chunks must be a positive integer")
+        n_chunks = self.n_chunks
         max_start = len(audio_44k) - CHUNK_SAMPLES
         if max_start <= 0:
             starts = [0] * n_chunks

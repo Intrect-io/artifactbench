@@ -10,11 +10,10 @@ import pytest
 
 
 def test_imports():
-    from artifactbench.models import MODEL_REGISTRY, BenchModel
-    from artifactbench.data.manifest import load_manifest, load_audio_mono
-    from artifactbench.metrics.failcheck import check_fail
-    from artifactbench.report.markdown import comparison_report
-    assert set(MODEL_REGISTRY.keys()) == {"artifactnet", "spectttra", "clam"}
+    from artifactbench.models import MODEL_REGISTRY
+    assert set(MODEL_REGISTRY.keys()) == {
+        "artifactnet", "spectttra", "clam", "deezer_ismir"
+    }
 
 
 @pytest.mark.slow

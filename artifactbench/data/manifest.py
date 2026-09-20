@@ -10,7 +10,6 @@ import soundfile as sf
 import torch
 import torchaudio.functional as TAF
 
-
 # WAV-quality sources eligible for codec invariance tests
 WAV_SOURCES = {
     "sonics_real", "fma_hardneg", "youtube_hardneg", "mom_real_wav", "mom_extra_real",
@@ -20,17 +19,18 @@ WAV_SOURCES = {
 }
 
 
-def load_manifest(path, split="bench", bench_origin=None):
-    """Load ArtifactBench v1 manifest JSON.
+def load_manifest(path, split="bench", bench_origin=None, protocol_split=None):
+    """Load ArtifactBench public or private runtime manifest JSON.
 
     Supports:
       1. ArtifactBench v1 format: {"bench": [...], "metadata": {...}}
-      2. Legacy training format: {"train": [...], "test": [...]}
+      2. ArtifactBench v2 format: {"tracks": [...], ...}
+      3. Legacy training format: {"train": [...], "test": [...]}
 
     Args:
         split: "test" | "train" | "all" | "bench".
-        bench_origin: "test" | "train" | None — filter inside bench manifest.
-            "test" = subset unseen by all models compared (fair evaluation).
+        bench_origin: "test" | "train" | None — optional historical-origin filter.
+            This field alone is not evidence that a row is unseen by every model.
     """
     with open(path) as f:
         m = json.load(f)
@@ -39,13 +39,21 @@ def load_manifest(path, split="bench", bench_origin=None):
         entries = m["bench"]
         if bench_origin:
             entries = [e for e in entries if e.get("bench_origin") == bench_origin]
+    elif "tracks" in m:
+        entries = m["tracks"]
+        if bench_origin:
+            entries = [e for e in entries if e.get("bench_origin") == bench_origin]
     elif split == "all":
         entries = m.get("train", []) + m.get("test", [])
     else:
         entries = m.get(split, [])
 
     by_source = defaultdict(list)
+    if protocol_split:
+        entries = [e for e in entries if e.get("protocol_split") == protocol_split]
     for e in entries:
+        if "track_id" not in e:
+            raise ValueError("every manifest row must contain track_id")
         by_source[e["source"]].append(e)
     return entries, by_source
 

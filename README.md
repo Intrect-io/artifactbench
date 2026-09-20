@@ -1,32 +1,23 @@
-# ArtifactBench
+# ArtifactBench v2
 
-> A public runner for evaluating AI-generated music detectors on the **ArtifactBench v1**
-> benchmark, with baseline adapters for **ArtifactNet**, **CLAM**, and **SpecTTTra**.
+ArtifactBench v2 is a lineage-aware, metadata-first evaluation suite for
+AI-generated music detectors. The frozen primary protocol contains 828 tracks
+(605 AI and 223 real), partitioned into calibration, validation, and sealed test
+sets before final model comparison. The public release does not add a new audio
+bundle.
 
-[![paper](https://img.shields.io/badge/arXiv-2604.16254-b31b1b.svg)](https://arxiv.org/abs/2604.16254)
+[![paper](https://img.shields.io/badge/paper-arXiv_pending-b31b1b.svg)](#citation)
 [![dataset](https://img.shields.io/badge/%F0%9F%A4%97-dataset-yellow)](https://huggingface.co/datasets/intrect/artifactbench)
 [![model](https://img.shields.io/badge/%F0%9F%A4%97-model-yellow)](https://huggingface.co/intrect/artifactnet)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
 ## Why
 
-Existing AI music detection benchmarks (SONICS: 5 generators; MoM: 6) don't
-measure out-of-distribution generalization. Models reporting F1 > 0.97 on
-SONICS collapse on diverse generators.
-
-**ArtifactBench v1** evaluates 22 AI generators × 6 real source families
-(6,200 tracks, 28 sources) under a 6-dimensional **sanity protocol** that
-catches models that hide behind mean F1.
-
-## Baseline results — SONICS full-test (23,288 tracks)
-
-| Model | Params | F1 | Precision | Recall | FPR | AUC |
-|------|-------:|:---:|:---:|:---:|:---:|:---:|
-| **ArtifactNet v9.5** | **4.2M** | **0.9993** | **0.9993** | **99.93%** | **0.09%** | **0.99999865** |
-| SpecTTTra α-120s | 18.7M | 0.8874 | 0.8610 | 91.55% | 17.97% | 0.9303 |
-| CLAM | 194M | 0.7652 | 0.6351 | 96.24% | 67.16% | 0.8222 |
-
-Reproduce via the **Three-way comparison** recipe below.
+Aggregate detector scores are not comparable when models silently evaluate
+different files, tune thresholds on test data, or inherit upstream training
+overlap. v2 freezes one ordered cohort, records decoding and inference failures,
+selects thresholds on calibration only, and reports paired metrics on the common
+successfully scored test-ID intersection.
 
 ## Install
 
@@ -37,63 +28,61 @@ python -m venv .venv && source .venv/bin/activate
 pip install -e .
 ```
 
-Optional extras:
-
-```bash
-# For CLAM (MERT + Wav2Vec2 feature extractors via transformers)
-pip install -e .[clam]
-
-# For SpecTTTra (SONICS)
-pip install git+https://github.com/awsaf49/sonics.git
-```
+The project dependency pins the SONICS framework to commit
+`9156ffad151f797c71556923c4a02fa01fa8fc91`. Install CLAM's feature-extractor
+dependencies with `pip install -e .[clam]`.
 
 System requirement: `ffmpeg` on PATH (required for codec invariance tests).
 
-## Quickstart — ArtifactNet only
+## Frozen protocol quickstart
 
 The ArtifactNet ONNX build is auto-downloaded from HuggingFace:
 
 ```bash
-# Grab the ArtifactBench v1 manifest
-wget https://huggingface.co/datasets/intrect/artifactbench/resolve/main/artifactbench_v1_manifest.json
+# Obtain artifactbench_v2_primary_manifest.json and independently acquire the
+# upstream audio identified by its retrieval fields and SHA-256 digests.
+python scripts/bind_audio_root.py \
+    --manifest artifactbench_v2_primary_manifest.json \
+    --audio-root /path/to/acquired/audio \
+    --output artifactbench_v2_runtime_manifest.json \
+    --report artifactbench_v2_binding_report.json
 
 # Run ArtifactNet on a small sample
 python -m artifactbench.bench \
     --model artifactnet \
-    --manifest artifactbench_v1_manifest.json \
-    --n-per-source 20 \
-    --n-codec-pair 10 \
+    --manifest artifactbench_v2_runtime_manifest.json \
+    --split all --n-per-source 0 --n-codec-pair 0 \
     --output results/smoke
 ```
 
-You'll get `results/smoke/artifactnet/{report.md, per_source.json, track_probs.json, codec_pair.json}`.
+You'll get per-source summaries, raw track probabilities, structured inference
+failures, and a run manifest containing the exact cohort and environment.
 
-## Three-way comparison
+## Four-model comparison
 
 ```bash
-# Install SpecTTTra first
-pip install git+https://github.com/awsaf49/sonics.git
-
-# Clone CLAM and fetch its weights (per upstream instructions)
-git clone https://github.com/StarkVision-AI/MoM-CLAM ~/dev/MoM-CLAM
+# Clone the pinned CLAM source and obtain its checkpoint under the upstream terms.
+git clone https://github.com/StarkVision-AI/MoM-CLAM ./MoM-CLAM
+git -C ./MoM-CLAM checkout 74e3a3277e1dfe9ae9ed433b6e8c51d74e9e1d9b
 # ... follow upstream README to obtain best_model_triplet_loss_margin_0.2.pth ...
 
-# Three-way run
+# Four-model run
 python -m artifactbench.bench \
-    --model artifactnet --model spectttra --model clam \
-    --clam-repo ~/dev/MoM-CLAM \
-    --clam-ckpt ~/dev/MoM-CLAM/model_wts/best_model_triplet_loss_margin_0.2.pth \
-    --manifest artifactbench_v1_manifest.json \
-    --bench-origin test \
-    --output results/3way
+    --model artifactnet --model spectttra --model deezer_ismir --model clam \
+    --clam-repo ./MoM-CLAM \
+    --clam-ckpt ./MoM-CLAM/model_wts/best_model_triplet_loss_margin_0.2.pth \
+    --manifest artifactbench_v2_runtime_manifest.json \
+    --split all --n-per-source 0 --n-codec-pair 0 --crop-policy center \
+    --output results/four_model
 ```
 
 Output layout:
 
 ```
-results/3way/
+results/four_model/
 ├── artifactnet/    # per-model artifacts
 ├── spectttra/
+├── deezer_ismir/
 ├── clam/
 ├── comparison.md   # side-by-side per-source table
 ├── roc_analysis.md
@@ -130,19 +119,21 @@ MODEL_REGISTRY["mine"] = MyDetector
 # then: python -m artifactbench.bench --model mine ...
 ```
 
-## Evaluation protocol — what's actually measured
+## Evaluation protocol
 
-Beyond overall F1, ArtifactBench reports:
+The v2 publication protocol adds analysis scripts to the versioned release:
 
-1. **Per-source TPR / FPR** — catches models that average-out per-source failures.
-2. **Codec invariance** Δ across `wav ↔ mp3 ↔ aac ↔ opus` round-trips.
-3. **Sanity FAIL count** — real FPR ≤ 5%, AI TPR ≥ 90% (Stable Audio: ≥ 60%),
-   mean codec Δ ≤ 0.15, max Δ ≤ 0.35.
-4. **`bench_origin=test`** subset (2,280 tracks) unseen by all compared models
-   for leak-free evaluation.
-5. **ROC / AUC** — plotted across all compared models.
+1. thresholds are selected on calibration only by maximizing TPR subject to
+   FPR no greater than 5%;
+2. validation is diagnostic only and cannot change the threshold;
+3. the sealed test reports AUROC, AUPRC, F1, balanced accuracy, TPR/FPR,
+   confusion matrices, per-source rates, and 2,000 lineage-bootstrap intervals;
+4. inference failures remain outside classification metrics and are reported as
+   coverage; and
+5. paired comparisons use the identical successfully scored test-ID intersection.
 
-Thresholds are in [`artifactbench/metrics/thresholds.py`](artifactbench/metrics/thresholds.py).
+Codec-pair evaluation remains available as a secondary experiment, but it is not
+mixed into the frozen 579-track primary test.
 
 ## License
 
@@ -151,7 +142,8 @@ their own licenses** — see [NOTICE.md](NOTICE.md) for a full breakdown.
 
 ## Citation
 
-If you use ArtifactBench or the ArtifactNet baseline in your research, please cite:
+The ArtifactBench v2 citation will be added when its arXiv identifier is issued.
+If you use the ArtifactNet baseline, cite:
 
 ```bibtex
 @article{oh2026artifactnet,

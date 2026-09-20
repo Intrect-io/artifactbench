@@ -9,7 +9,7 @@ CLAM has no pip package and no HF weight distribution. You must:
   3. Pass --clam-repo <path> --clam-ckpt <path> to the benchmark CLI
      (or construct CLAMModel(clam_repo=..., clam_ckpt=...))
 """
-import random
+import hashlib
 import sys
 from pathlib import Path
 
@@ -18,6 +18,19 @@ import torch
 import torchaudio.functional as TAF
 
 from .base import BenchModel
+
+MERT_REPO = "m-a-p/MERT-v1-95M"
+MERT_REVISION = "12af15fef9d0ac838c3f475bfbbf26d2060dd4f5"
+W2V_REPO = "m3hrdadfi/wav2vec2-base-100k-gtzan-music-genres"
+W2V_REVISION = "caf978c8328a2cec4229b3eb0b41b162e379caa1"
+
+
+def _sha256(path: Path) -> str:
+    digest = hashlib.sha256()
+    with path.open("rb") as handle:
+        for chunk in iter(lambda: handle.read(1024 * 1024), b""):
+            digest.update(chunk)
+    return digest.hexdigest()
 
 
 class CLAMModel(BenchModel):
@@ -28,11 +41,22 @@ class CLAMModel(BenchModel):
     paper_ref = "arXiv:2512.00621"
 
     def __init__(self, clam_repo: str | None = None, clam_ckpt: str | None = None,
-                 use_fp16: bool = True):
+                 use_fp16: bool = True, crop_policy: str = "center"):
+        if crop_policy not in {"center", "start"}:
+            raise ValueError("crop_policy must be 'center' or 'start'")
         self.clam_repo = clam_repo
         self.clam_ckpt = clam_ckpt
         self.use_fp16 = use_fp16
+        self.crop_policy = crop_policy
         self.device = "cpu"
+        self.provenance = {
+            "clam_repo_revision": "74e3a3277e1dfe9ae9ed433b6e8c51d74e9e1d9b",
+            "mert_repo": MERT_REPO,
+            "mert_revision": MERT_REVISION,
+            "wav2vec2_repo": W2V_REPO,
+            "wav2vec2_revision": W2V_REVISION,
+            "crop_policy": crop_policy,
+        }
 
     def load(self, device: str = "cuda") -> None:
         if self.clam_repo is None or self.clam_ckpt is None:
@@ -46,20 +70,23 @@ class CLAMModel(BenchModel):
         ckpt = Path(self.clam_ckpt).expanduser().resolve()
         if not ckpt.exists():
             raise FileNotFoundError(f"CLAM checkpoint not found: {ckpt}")
+        self.provenance["checkpoint_sha256"] = _sha256(ckpt)
 
         from transformers import AutoModel, Wav2Vec2FeatureExtractor
 
         self.device = device
 
-        self.mert_model = AutoModel.from_pretrained("m-a-p/MERT-v1-95M", trust_remote_code=True)
+        self.mert_model = AutoModel.from_pretrained(
+            MERT_REPO, revision=MERT_REVISION, trust_remote_code=True
+        )
         self.mert_processor = Wav2Vec2FeatureExtractor.from_pretrained(
-            "m-a-p/MERT-v1-95M", trust_remote_code=True)
+            MERT_REPO, revision=MERT_REVISION, trust_remote_code=True)
         self.mert_model = self.mert_model.to(device).eval()
 
         self.w2v_model = AutoModel.from_pretrained(
-            "m3hrdadfi/wav2vec2-base-100k-gtzan-music-genres", trust_remote_code=True)
+            W2V_REPO, revision=W2V_REVISION, trust_remote_code=True)
         self.w2v_processor = Wav2Vec2FeatureExtractor.from_pretrained(
-            "m3hrdadfi/wav2vec2-base-100k-gtzan-music-genres", trust_remote_code=True)
+            W2V_REPO, revision=W2V_REVISION, trust_remote_code=True)
         self.w2v_model = self.w2v_model.to(device).eval()
 
         # Import CLAM model class from cloned repo
@@ -95,7 +122,7 @@ class CLAMModel(BenchModel):
         target_len = target_sr * duration
         if len(audio) > target_len:
             max_start = len(audio) - target_len
-            start = random.randint(0, max_start) if max_start > 0 else 0
+            start = max_start // 2 if self.crop_policy == "center" else 0
             audio = audio[start:start + target_len]
         elif len(audio) < target_len:
             audio = np.pad(audio, (0, target_len - len(audio)))
