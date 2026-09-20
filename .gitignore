@@ -1,28 +1,38 @@
 # Python
 __pycache__/
-*.py[cod]
+*.pyc
 *.egg-info/
-.venv/
 .pytest_cache/
-.ruff_cache/
-.mypy_cache/
-
-# Build
 build/
 dist/
 
-# Benchmarks / results
+# Virtual environments (task-scoped venvs, not source)
+.venv-*/
+venv/
+
+# Local tool binaries (bazel, ffmpeg, etc.)
+.tools/
+
+# Benchmark run outputs (regenerable — large: out/ alone is 9.8G/41K files)
+out/
+out_deezer_ismir_full/
+out_deezer_ismir_smoke/
 outputs/
-results/
-*.onnx
-*.pt
-*.pth
+*.log
 
-# Data (users download separately)
-/data/
-manifest/*.json
+# Model checkpoints (large binaries — not source; 3.5G)
+models/
 
-# Editor
-.vscode/
-.idea/
+# Paper build artifacts (keep main.tex, generated figures/data, drop compiled output)
+paper/main.pdf
+paper/main.log
+paper/*.aux
+paper/*.out
+paper/*.toc
+paper/__pycache__/
+
+# OS / editor
 .DS_Store
+.idea/
+.vscode/
+._*

@@ -1,0 +1,10 @@
+{
+  "manifest_sha256": "feab7c4c3d037919fd784dc40e46199470088abde532c5181e34573f20dceefd",
+  "matplotlib": "3.11.1",
+  "public_predictions_summary_sha256": "9002708c18eff81f93f0e7afab2c00797f24bf0bf64f2e924789a5c5d24c5355",
+  "release_version": "1.2-rc2",
+  "scope": "completed statistical report rendering",
+  "statistics_inputs_sha256": "76962cec8883a1457314d63fc27ad566808899994710383251d1a264bfcff3b1",
+  "statistics_summary_sha256": "5e7552e88952fb26d1e6001b742f4e98529c5ed8f295cf88209af667d8bdf168",
+  "tool_sha256": "96910c7bc71e9b8e91cfeea6d2bf9fd234d67f7b5bb63df81c2d7070ce77009c"
+}

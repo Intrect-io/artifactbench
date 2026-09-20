@@ -52,5 +52,5 @@ include = ["artifactbench*"]
 
 [tool.pytest.ini_options]
 markers = [
-    "slow: network or model-inference integration tests",
+    "slow: network, model-loading, or model-inference integration tests",
 ]

@@ -11,12 +11,14 @@ import pytest
 
 def test_imports():
     import artifactbench
-    from artifactbench.models import MODEL_REGISTRY
+    from artifactbench.models import MODEL_REGISTRY, BenchModel
 
     assert artifactbench.__version__ == "0.2.0"
     assert set(MODEL_REGISTRY.keys()) == {
-        "artifactnet", "spectttra", "clam", "deezer_ismir"
+        "artifactnet", "spectttra", "clam", "spectttra_beta5s",
+        "deezer_ismir", "fst", "ast_60s", "deepfense",
     }
+    assert BenchModel is not None
 
 
 def test_reports_identify_v2():

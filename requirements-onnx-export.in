@@ -1,0 +1,4 @@
+# Export-only overlay. The measured base is RTX_ENV torch 2.13.0 / ORT 1.29.0.
+# Install into an isolated environment, never the active evaluation environment.
+onnx==1.22.0
+onnxscript==0.7.1

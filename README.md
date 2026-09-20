@@ -19,6 +19,12 @@ overlap. v2 freezes one ordered cohort, records decoding and inference failures,
 selects thresholds on calibration only, and reports paired metrics on the common
 successfully scored test-ID intersection.
 
+The earlier v1.1 and v1.2 development materials remain available in
+[`v1.1/`](v1.1/), [`PLAN_v1.2.md`](PLAN_v1.2.md),
+[`RESULTS_8WAY.md`](RESULTS_8WAY.md), [`docs/`](docs/), and [`paper/`](paper/).
+They are retained as historical evidence and are separate from the frozen v2
+publication protocol documented below.
+
 ## Install
 
 ```bash

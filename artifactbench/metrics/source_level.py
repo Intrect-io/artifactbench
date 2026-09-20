@@ -38,6 +38,7 @@ def measure_source(entries, model, verbose=True):
                 "label": e["label"],
                 "track_id": e["track_id"],
                 "source": e["source"],
+                "path": path,
             })
         except Exception as ex:
             failures.append({

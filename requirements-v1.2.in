@@ -1,0 +1,13 @@
+# Isolated Linux/CUDA baseline environment; ArtifactNet production also retains
+# its original RTX_ENV provenance for the historical comparison.
+torch==2.8.0
+torchaudio==2.8.0
+torchvision==0.23.0
+transformers==4.57.6
+deepfense==0.2.2
+beat-this==1.1.0
+pytorch-lightning==2.6.5
+onnxruntime==1.29.0
+sonics @ git+https://github.com/awsaf49/sonics.git@9156ffad151f797c71556923c4a02fa01fa8fc91
+lightgbm==4.7.0
+pytest==9.1.1
