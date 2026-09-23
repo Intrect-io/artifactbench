@@ -11,6 +11,10 @@ bundle.
 [![model](https://img.shields.io/badge/%F0%9F%A4%97-model-yellow)](https://huggingface.co/intrect/artifactnet)
 [![license](https://img.shields.io/badge/license-MIT-green)](LICENSE)
 
+## Try the maintained detector for free
+
+Run ArtifactNet in your browser, no signup: **[demo.intrect.io](https://demo.intrect.io/)**. For the batch/API product and its limits: **[intrect.io/artifactnet](https://intrect.io/artifactnet/)**. Methodology, per-source results and the public comparison: the [ArtifactBench field report](https://intrect.io/research/artifact-observatory/ai-music-detector-benchmark-2026/).
+
 ## Why
 
 Aggregate detector scores are not comparable when models silently evaluate
