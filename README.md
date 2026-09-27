@@ -13,7 +13,7 @@ bundle.
 
 ## Try the maintained detector for free
 
-Run ArtifactNet in your browser, no signup: **[demo.intrect.io](https://demo.intrect.io/)**. For the batch/API product and its limits: **[intrect.io/artifactnet](https://intrect.io/artifactnet/)**. Methodology, per-source results and the public comparison: the [ArtifactBench field report](https://intrect.io/research/artifact-observatory/ai-music-detector-benchmark-2026/).
+Run [free AI music detection](https://demo.intrect.io/) in your browser with ArtifactNet, no signup. For the batch/API product and its limits: **[intrect.io/artifactnet](https://intrect.io/artifactnet/)**. Methodology, per-source results and the public comparison: the [ArtifactBench field report](https://intrect.io/research/artifact-observatory/ai-music-detector-benchmark-2026/).
 
 ## Why
 
