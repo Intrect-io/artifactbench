@@ -42,3 +42,6 @@ jobs:
 
       - name: Run fast test suite
         run: python -m pytest -m "not slow" -q -p no:cacheprovider
+
+      - name: Check documentation links and CLI flags
+        run: python scripts/check_docs.py
