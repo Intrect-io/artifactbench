@@ -213,6 +213,27 @@ ArtifactNet's non-finite chunk investigation is reproducible with
 at least four finite scores among seven fixed chunks; the strict any-non-finite
 result remains a separate sensitivity analysis.
 
+## Development
+
+CI (`.github/workflows/ci.yml`) runs the fast suite and the documentation check on
+every push to `main` and every pull request, on CPU with Python 3.12. To run the
+same checks locally:
+
+```bash
+# System tools: ffmpeg, libsndfile, and fpcalc (Chromaprint), e.g. on Ubuntu:
+#   apt-get install ffmpeg libsndfile1 libchromaprint-tools
+pip install -e ".[test]"
+python -m pytest -m "not slow"
+python scripts/check_docs.py
+```
+
+Tests marked `slow` need network access, model weights, or inference, and are
+not run in CI; run them with `python -m pytest -m slow`. `check_docs.py` checks
+that every relative link in `README.md`, `NOTICE.md`, `docs/*.md` and
+`paper/README.md` resolves, and that every `--flag` in a documented
+`python -m ...` or `python scripts/....py` command is accepted by that program.
+Use `python scripts/check_docs.py --skip-flags` to check links only.
+
 ## License
 
 The runner code is MIT licensed. **Model weights and datasets are subject to
