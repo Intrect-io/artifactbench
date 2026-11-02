@@ -51,6 +51,12 @@ artifactbench = "artifactbench.bench:main"
 include = ["artifactbench*"]
 
 [tool.pytest.ini_options]
+# Only the maintained suite. archive/ holds historical copies of tests whose modules
+# no longer exist under that path; collecting them aborts the whole run.
+testpaths = ["tests"]
+norecursedirs = [".*", "build", "dist", "*.egg", "*.egg-info", "venv", ".venv*",
+                 "archive", "v1.1", "v1.1_staging", "worktrees", "out", "out_*", "outputs",
+                 "notebooks", "paper", "release"]
 markers = [
     "slow: network, model-loading, or model-inference integration tests",
 ]

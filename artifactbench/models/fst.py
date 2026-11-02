@@ -16,11 +16,51 @@ Paper:     arXiv:2601.13647
 """
 import gc
 import sys
+from contextlib import contextmanager
 from pathlib import Path
 
 import numpy as np
 
 from .base import BenchModel
+
+
+MERT_REPO_ID = "m-a-p/MERT-v1-95M"
+_MERT_LOADER_NAMES = ("AutoConfig", "AutoModel")
+
+
+class _PinnedLoader:
+    """Stand-in for a transformers ``Auto*`` class that only loads MERT from a fixed snapshot."""
+
+    def __init__(self, original, snapshot):
+        self._original = original
+        self._snapshot = str(snapshot)
+
+    def from_pretrained(self, name, *args, **kwargs):
+        if str(name) not in (MERT_REPO_ID, self._snapshot):
+            raise ValueError(f"Unexpected pretrained model requested by FST: {name!r}")
+        return self._original.from_pretrained(self._snapshot, *args, **dict(kwargs, local_files_only=True))
+
+    def __getattr__(self, attribute):
+        return getattr(self._original, attribute)
+
+
+@contextmanager
+def pinned_mert_loaders(module, snapshot):
+    """Within the block, ``module.AutoConfig`` / ``module.AutoModel`` resolve MERT only from ``snapshot``.
+
+    FST's upstream code calls ``from_pretrained("m-a-p/MERT-v1-95M")``, which would otherwise fetch
+    whatever revision the Hub serves today. Any other model id raises ``ValueError``. The original
+    attributes are restored on exit, including when the block raises.
+    """
+    names = [n for n in _MERT_LOADER_NAMES if hasattr(module, n)]
+    originals = {n: getattr(module, n) for n in names}
+    try:
+        for n in names:
+            setattr(module, n, _PinnedLoader(originals[n], snapshot))
+        yield module
+    finally:
+        for n in names:
+            setattr(module, n, originals[n])
 
 
 FST_REPO_DEFAULT = "/home/unohee/dev/FST-AI-music-detection"
@@ -49,10 +89,16 @@ class FSTModel(BenchModel):
     def __init__(self,
                  fst_repo: str = FST_REPO_DEFAULT,
                  stage1_ckpt: str | None = None,
-                 stage2_ckpt: str | None = None):
+                 stage2_ckpt: str | None = None,
+                 mert_path: str | None = None,
+                 beat_checkpoint: str | None = None):
         self.fst_repo = Path(fst_repo)
         self.stage1_ckpt = stage1_ckpt or str(self.fst_repo / STAGE1_CKPT_DEFAULT)
         self.stage2_ckpt = stage2_ckpt or str(self.fst_repo / STAGE2_CKPT_DEFAULT)
+        # Pinned local MERT snapshot (v12.model_assets); None keeps the upstream Hub lookup.
+        self.mert_path = mert_path
+        # Local beat_this checkpoint; None keeps beat_this's named "final0" download.
+        self.beat_checkpoint = beat_checkpoint or "final0"
         self.backbone = None
         self.classifier = None
         self.file2beats = None
@@ -66,27 +112,40 @@ class FSTModel(BenchModel):
         if str(self.fst_repo) not in sys.path:
             sys.path.insert(0, str(self.fst_repo))
 
-        from model import MERT_AudioCAT, MusicAudioClassifier
+        from contextlib import ExitStack
+
         from beat_this.inference import File2Beats
 
         self.device = device
         self._torch = torch
 
-        # Stage-1: MERT_AudioCAT (FP32 — MERT weights expect FP32)
-        self.backbone = MERT_AudioCAT.load_from_checkpoint(
-            self.stage1_ckpt
-        ).to(device).eval()
+        with ExitStack() as stack:
+            if self.mert_path is not None:
+                # Patch transformers before FST's model module binds the Auto* names, and the
+                # module itself in case it was imported earlier in this process.
+                import transformers
+                stack.enter_context(pinned_mert_loaders(transformers, self.mert_path))
+            import model as fst_model
+            if self.mert_path is not None:
+                stack.enter_context(pinned_mert_loaders(fst_model, self.mert_path))
+            MERT_AudioCAT = fst_model.MERT_AudioCAT
+            MusicAudioClassifier = fst_model.MusicAudioClassifier
 
-        # Stage-2: FusionSegmentTransformer (FP16 — forward() does x.half() internally)
-        self.classifier = MusicAudioClassifier.load_from_checkpoint(
-            self.stage2_ckpt,
-            input_dim=768,
-            backbone="fusion_segment_transformer",
-            is_emb=True,
-        ).to(device).half().eval()
+            # Stage-1: MERT_AudioCAT (FP32 — MERT weights expect FP32)
+            self.backbone = MERT_AudioCAT.load_from_checkpoint(
+                self.stage1_ckpt
+            ).to(device).eval()
+
+            # Stage-2: FusionSegmentTransformer (FP16 — forward() does x.half() internally)
+            self.classifier = MusicAudioClassifier.load_from_checkpoint(
+                self.stage2_ckpt,
+                input_dim=768,
+                backbone="fusion_segment_transformer",
+                is_emb=True,
+            ).to(device).half().eval()
 
         # Beat detection model (재사용)
-        self.file2beats = File2Beats(checkpoint_path="final0", device=device, dbn=False)
+        self.file2beats = File2Beats(checkpoint_path=self.beat_checkpoint, device=device, dbn=False)
 
         # preprocess.find_optimal_segment_length 함수 캐싱
         from preprocess import find_optimal_segment_length
@@ -100,7 +159,7 @@ class FSTModel(BenchModel):
             del self.file2beats
             self._torch.cuda.empty_cache()
             gc.collect()
-            self.file2beats = File2Beats(checkpoint_path="final0", device=self.device, dbn=False)
+            self.file2beats = File2Beats(checkpoint_path=self.beat_checkpoint, device=self.device, dbn=False)
 
     def _audio_to_segments(self, audio_44k: np.ndarray) -> tuple:
         """44.1 kHz mono → (segments[48,1,240000], padding_mask[48])."""
