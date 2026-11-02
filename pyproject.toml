@@ -33,6 +33,8 @@ dependencies = [
 ]
 
 [project.optional-dependencies]
+# Fast-suite (pytest -m "not slow") dependencies, used by CI.
+test = ["pytest>=8", "librosa>=0.10", "onnx>=1.16"]
 clam = ["transformers>=4.40"]
 spectttra = [
     "sonics @ git+https://github.com/awsaf49/sonics.git@9156ffad151f797c71556923c4a02fa01fa8fc91",
