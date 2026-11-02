@@ -26,10 +26,10 @@ jobs:
           cache: pip
           cache-dependency-path: pyproject.toml
 
-      - name: Install system audio libraries
+      - name: Install system audio libraries (fpcalc comes from libchromaprint-tools)
         run: |
           sudo apt-get update
-          sudo apt-get install -y --no-install-recommends ffmpeg libsndfile1
+          sudo apt-get install -y --no-install-recommends ffmpeg libsndfile1 libchromaprint-tools
 
       - name: Install package (CPU-only torch)
         run: |
