@@ -21,7 +21,7 @@ outputs/
 *.log
 
 # Model checkpoints (large binaries — not source; 3.5G)
-models/
+/models/
 
 # Paper build artifacts (keep main.tex, generated figures/data, drop compiled output)
 paper/main.pdf
