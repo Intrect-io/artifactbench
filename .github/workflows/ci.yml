@@ -27,6 +27,9 @@ jobs:
           cache-dependency-path: pyproject.toml
 
       - name: Install system audio libraries (fpcalc comes from libchromaprint-tools)
+        timeout-minutes: 10
+        env:
+          DEBIAN_FRONTEND: noninteractive
         run: |
           sudo apt-get update
           sudo apt-get install -y --no-install-recommends ffmpeg libsndfile1 libchromaprint-tools
