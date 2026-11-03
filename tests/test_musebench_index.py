@@ -206,3 +206,113 @@ def test_end_offset_beyond_listed_size_is_rejected(tmp_path):
     shard["size"] = 100
     with pytest.raises(ix.TarFormatError, match="beyond"):
         ix.index_shard(shard, tmp_path, reader(blob))
+
+
+# ----------------------------------------------------------------------- StreamFetcher
+
+class FakeStream:
+    def __init__(self, blob, offset, fail_after=None):
+        self.data, self.pos, self.fail_after, self.reads = blob, offset, fail_after, 0
+
+    def read(self, n):
+        self.reads += 1
+        if self.fail_after is not None and self.reads > self.fail_after:
+            raise ConnectionResetError("boom")
+        chunk = self.data[self.pos:self.pos + n]
+        self.pos += len(chunk)
+        return chunk
+
+    def close(self):
+        pass
+
+
+def stream_fetcher(blob, fail_first_streams=0, chunk=4096):
+    opened = []
+
+    def opener(url, offset):
+        stream = FakeStream(blob, offset, fail_after=2 if len(opened) < fail_first_streams else None)
+        opened.append(offset)
+        return stream
+
+    f = ix.StreamFetcher("https://example.invalid/x.tar", opener=opener)
+    f.CHUNK = chunk
+    return f, opened
+
+
+def big_blob():
+    members = [(f"Jamendo/{i:03d}.mp3", bytes([i % 251]) * (1000 + 37 * i)) for i in range(40)]
+    members.insert(5, (LONG, b"L" * 70_000))
+    return make_tar(members, tarfile.GNU_FORMAT)
+
+
+def test_stream_fetcher_matches_range_reader():
+    blob = big_blob()
+    fetcher, opened = stream_fetcher(blob)
+    recs, end = walk_all_with(fetcher)
+    check_against_tarfile(blob, recs)
+    assert recs == walk_all(blob)[0] and end == walk_all(blob)[1]
+    assert opened == [0]  # one sequential GET for the whole shard
+
+
+def walk_all_with(fetch, start=0):
+    gen = ix.walk_tar(fetch, start)
+    recs = []
+    while True:
+        try:
+            recs.append(next(gen))
+        except StopIteration as stop:
+            return recs, stop.value
+
+
+def test_stream_fetcher_reopens_after_dropped_connection(monkeypatch):
+    blob = big_blob()
+    fetcher, opened = stream_fetcher(blob, fail_first_streams=2)
+    monkeypatch.setattr(ix.time, "sleep", lambda s: None)  # no real backoff in tests
+    recs, _ = walk_all_with(fetcher)
+    check_against_tarfile(blob, recs)
+    assert len(opened) == 3 and opened[0] == 0 and opened[1] > 0 and opened[2] > opened[1]
+
+
+def test_stream_fetcher_resumes_mid_archive_with_range_open():
+    blob = big_blob()
+    recs_full, _ = walk_all(blob)
+    mid = recs_full[12]
+    start = ix.record_end(recs_full[11])
+    assert mid["offset"] == start
+    fetcher, opened = stream_fetcher(blob)
+    recs, _ = walk_all_with(fetcher, start)
+    assert recs == recs_full[12:]
+    assert opened == [start]
+
+
+def test_stream_fetcher_refuses_to_seek_back():
+    blob = big_blob()
+    fetcher, _ = stream_fetcher(blob)
+    fetcher(10_000, 512)
+    with pytest.raises(ValueError, match="seek back"):
+        fetcher(0, 512)
+
+
+def test_index_shard_with_stream_fetcher_resumes(tmp_path):
+    blob = big_blob()
+    shard = shard_for(blob)
+    fetcher, _ = stream_fetcher(blob)
+    n = [0]
+    real = fetcher.__call__
+
+    class Boom(Exception):
+        pass
+
+    def flaky(offset, length):
+        n[0] += 1
+        if n[0] == 9:
+            raise Boom
+        return real(offset, length)
+
+    with pytest.raises(Boom):
+        ix.index_shard(shard, tmp_path, flaky)
+    fetcher2, opened2 = stream_fetcher(blob)
+    ix.index_shard(shard, tmp_path, fetcher2)
+    recs = [json.loads(l) for l in (tmp_path / "part9_001.jsonl").read_text().splitlines()]
+    check_against_tarfile(blob, recs)
+    assert opened2[0] > 0

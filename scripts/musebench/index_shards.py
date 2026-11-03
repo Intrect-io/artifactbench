@@ -268,6 +268,93 @@ class RangeFetcher:
         raise OSError(f"range {offset}+{length}: retries exhausted")
 
 
+class StreamFetcher:
+    """Forward-only reader: one streaming GET from the resume offset, data skipped locally.
+
+    For shards with many small members, one range request per header is latency-bound
+    (~0.7 s each); reading the shard sequentially and discarding member data is faster.
+    ``walk_tar`` only moves forward, so a small look-back buffer is enough. A broken stream
+    is reopened with ``Range: bytes=<offset>-``.
+    """
+
+    CHUNK = 1 << 20
+
+    def __init__(self, url: str, opener: Callable[[str, int], object] | None = None,
+                 max_retries: int = 12):
+        self.url = url
+        self.opener = opener or self._open_http
+        self.max_retries = max_retries
+        self.stream = None
+        self.buf = b""
+        self.buf_start = 0  # file offset of buf[0]
+        self.bytes_read = 0
+
+    @staticmethod
+    def _open_http(url: str, offset: int):
+        req = urllib.request.Request(url, headers={"Range": f"bytes={offset}-",
+                                                   "User-Agent": USER_AGENT})
+        resp = urllib.request.urlopen(req, timeout=120)
+        if resp.status != 206 and not (resp.status == 200 and offset == 0):
+            raise OSError(f"stream {url}: HTTP {resp.status}")
+        return resp
+
+    def _reopen(self, offset: int) -> None:
+        if self.stream is not None:
+            try:
+                self.stream.close()
+            except OSError:
+                pass
+        self.stream = self.opener(self.url, offset)
+        self.buf, self.buf_start = b"", offset
+
+    def _read_more(self) -> bool:
+        delay = 1.0
+        for attempt in range(self.max_retries):
+            try:
+                if self.stream is None:
+                    self._reopen(self.buf_start + len(self.buf))
+                chunk = self.stream.read(self.CHUNK)
+                if chunk:
+                    self.buf += chunk
+                    self.bytes_read += len(chunk)
+                    return True
+                return False  # EOF
+            except (OSError, http.client.HTTPException):
+                if attempt == self.max_retries - 1:
+                    raise
+                keep_start, keep = self.buf_start, self.buf
+                self.stream = None
+                time.sleep(min(delay, 120.0))
+                delay *= 2
+                try:
+                    self._reopen(keep_start + len(keep))
+                except (OSError, http.client.HTTPException):
+                    self.stream = None
+                self.buf, self.buf_start = keep, keep_start
+        raise OSError(f"stream {self.url}: retries exhausted")
+
+    def __call__(self, offset: int, length: int) -> bytes:
+        if self.stream is None and not self.buf:
+            self.buf_start = offset
+        if offset < self.buf_start:
+            raise ValueError(f"stream reader cannot seek back to {offset} (< {self.buf_start})")
+        end_have = self.buf_start + len(self.buf)
+        if offset > end_have + 64 * self.CHUNK:
+            # Far jump (resume or huge member): cheaper to reopen than to read through.
+            self._reopen(offset)
+        # Drop bytes before ``offset`` and read until the request is covered or EOF.
+        while True:
+            if offset > self.buf_start:
+                drop = min(offset - self.buf_start, len(self.buf))
+                self.buf, self.buf_start = self.buf[drop:], self.buf_start + drop
+            if offset == self.buf_start and len(self.buf) >= length:
+                break
+            if not self._read_more():
+                break
+        rel = offset - self.buf_start
+        return self.buf[rel:rel + length] if rel >= 0 else b""
+
+
 # --------------------------------------------------------------------------- shard index
 
 def resolve_url(repo: str, revision: str, filename: str) -> str:
@@ -363,6 +450,10 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--parts", type=int, nargs="+", default=list(PARTS))
     ap.add_argument("--only", nargs="*", default=None, help="restrict to these shard stems")
     ap.add_argument("--workers", type=int, default=75, help="shards walked concurrently")
+    ap.add_argument("--mode", choices=["range", "stream"], default="range",
+                    help="range: one range request per header (cheap on bandwidth); "
+                         "stream: one sequential GET per shard, member data discarded "
+                         "(faster for shards with many small members)")
     ap.add_argument("--refresh-list", action="store_true",
                     help="re-query the shard list even if index/shards.json exists")
     args = ap.parse_args(argv)
@@ -393,7 +484,8 @@ def main(argv: list[str] | None = None) -> int:
 
     def run(shard: dict) -> dict:
         url = resolve_url(shard["repo"], shard["revision"], shard["file"])
-        return index_shard(shard, out_dir, RangeFetcher(url), progress)
+        fetcher = StreamFetcher(url) if args.mode == "stream" else RangeFetcher(url)
+        return index_shard(shard, out_dir, fetcher, progress)
 
     failures = 0
     with ThreadPoolExecutor(max_workers=max(1, args.workers)) as pool:
