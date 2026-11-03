@@ -29,9 +29,9 @@ from scripts.musebench.index_shards import BLOCK, padded, record_end  # noqa: E4
 
 DEFAULT_ROOT = Path(os.environ.get("MUSEBENCH_ROOT", "~/data/musebench")).expanduser()
 EXPECTED_PARTS = {1: 15, 2: 15, 3: 15, 4: 15, 5: 15}
-# Lower bound on audio files in a complete index. The paper reports 361,166 tracks; the
-# count actually found in the published shards is recorded in docs/MUSEBENCH.md.
-MIN_AUDIO_FILES = 300_000
+# Lower bound on audio files in a complete index: the measured count is 351,183 (paper total
+# 361,166 minus the 9,983 Genius-Lyrics human tracks that are not shipped); see docs/MUSEBENCH.md.
+MIN_AUDIO_FILES = 351_000
 AUDIO_EXT = (".wav", ".mp3", ".flac", ".ogg", ".m4a", ".aac", ".opus")
 
 

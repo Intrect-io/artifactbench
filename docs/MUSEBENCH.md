@@ -51,20 +51,70 @@ The shard list is pinned to these commits:
 | `Anonymousv22222/MuseBench-part4` | `251fd5aeab23b9ec5bb6b7c2f1c8847c1d0bda57` |
 | `Anonymousv22222/MuseBench-part5` | `95dbba8b8e3b6e917c1119af8046d3ab8ded7189` |
 
-<!-- INVENTORY -->
+## Measured inventory (shard index, 2026-11-04)
+
+Built with `scripts/musebench/index_shards.py` and summarized with `scripts/musebench/inventory.py`
+(`python scripts/musebench/inventory.py --depth 1`). The 75 shards hold 351,188 regular files,
+798.0 GB: 351,183 audio files plus 5 CSV files (`Caption/captions-genius.csv`,
+`Caption/captions-jamendo.csv`, two files under `Genius-Lyrics/`, and one CSV in `Jamendo/`).
+351,183 is exactly the paper's 361,166 tracks minus the 9,983 Genius-Lyrics human tracks that
+are not redistributed.
+
+| Folder | Files | GB | Extensions | Shards |
+|---|---:|---:|---|---:|
+| `Caption` | 2 | 0.0 | csv 2 | 2 |
+| `Genius-Lyrics` | 2 | 0.1 | csv 2 | 2 |
+| `Jamendo` | 9,921 | 54.9 | mp3 9920, csv 1 | 10 |
+| `MagNet_Generated_Music` | 19,903 | 38.2 | wav 19903 | 5 |
+| `Musicgen_Generated_Music` | 19,903 | 38.2 | wav 19903 | 10 |
+| `OOD FMA` | 8,672 | 70.9 | mp3 8672 | 10 |
+| `aac_generated_music` | 17,935 | 9.1 | m4a 17935 | 6 |
+| `ai_human_co-created_music` | 9,887 | 26.2 | wav 9887 | 9 |
+| `audioldm_generated_music` | 19,903 | 38.2 | wav 19903 | 10 |
+| `eq_generated_music` | 17,935 | 48.0 | wav 17935 | 8 |
+| `gaussion_noised_music` | 17,935 | 40.2 | wav 15935, mp3 2000 | 7 |
+| `jasco_generated_music` | 19,903 | 12.7 | wav 19903 | 8 |
+| `loudness_generation_music` | 17,935 | 48.0 | wav 17935 | 7 |
+| `magenta_generated_music` | 19,903 | 114.6 | wav 19903 | 20 |
+| `mp3_noised_music` | 17,935 | 11.0 | mp3 17935 | 5 |
+| `mustango_generated_music` | 19,903 | 6.5 | wav 19903 | 5 |
+| `ogg_noised_music` | 17,935 | 4.7 | ogg 17935 | 5 |
+| `pgd_generated_music` | 17,935 | 15.5 | wav 15935, mp3 2000 | 5 |
+| `pitch_time_generated_music` | 17,935 | 48.5 | wav 17935 | 10 |
+| `riffusion_generated_music` | 19,903 | 53.9 | wav 19903 | 10 |
+| `stable_audio_generated_music` | 19,903 | 105.3 | wav 19903 | 15 |
+| `suno_generated_music` | 10,000 | 8.1 | mp3 10000 | 5 |
+| `udio_generated_music` | 10,000 | 5.1 | mp3 10000 | 5 |
+| **Total** | **351,188** | **798.0** | | |
+
+Observations that matter for acquisition:
+
+- Every AI generator folder holds 19,903 files (9,983 `Genius-Lyrics/` + 9,920 `Jamedo/`), except
+  Suno and Udio (10,000 each, `fake_<id>_<generator>_<seed>.mp3`).
+- The clean AI audio is large: `magenta` 114.6 GB, `stable_audio` 105.3 GB, `riffusion` 53.9 GB,
+  `MagNet`/`Musicgen`/`audioldm` 38.2 GB each, `jasco` 12.7 GB, `mustango` 6.5 GB, Suno 8.1 GB,
+  Udio 5.1 GB. Human audio: Jamendo 54.9 GB, OOD FMA 70.9 GB. Co-created: 26.2 GB.
+- Each of the eight transform folders holds 17,935 files spread over the ten generator
+  sub-folders (about 2,000 per open generator, 1,000 for each of Suno and Udio, i.e. a test-split
+  sample). Their formats follow the transform: `aac_*` is `.m4a`, `ogg_*` is `.ogg`, `mp3_*` is
+  `.mp3`. In `gaussion_noised_music` and `pgd_generated_music` the Suno and Udio files are `.mp3`
+  (2,000 each) and the rest `.wav`.
+- Member paths are unique across all 75 shards (checked by `verify.py index`); a path therefore
+  identifies a track without the shard name.
+
 
 ## Dataset card vs paper
 
 | Topic | Dataset card | Paper |
 |---|---|---|
-| Tenth generator | `magenta_generated_music/` ("Magenta", Apache 2.0) | Lyria RealTime via API |
-| Paired generators | 8 (MusicGen, MAGNeT, AudioLDM, JASCO, Magenta, Mustango, Riffusion, Stable Audio) | 8 open + Lyria; AudioLDM is **AudioLDM2** |
-| Jamendo human count | ~9,945 | 9,920 |
+| Eighth paired generator | `magenta_generated_music/` ("Magenta", Apache 2.0) | Lyria RealTime via API; the folder holds 19,903 files, the same count and hours as the paper's Lyria row, so it is inferred to be that generator (neither source says so) |
+| Paired generators | 8: MusicGen, MAGNeT, AudioLDM, JASCO, Magenta, Mustango, Riffusion, Stable Audio | 8: seven open-source (MusicGen, AudioLDM**2**, Riffusion, MAGNeT, JASCO, Mustango, Stable Audio Open) plus Lyria RealTime; with Suno and Udio, 10 generators in both |
+| Jamendo human count | ~9,945 | 9,920 (the shards hold exactly 9,920 mp3 files) |
 | OOD FMA window | "2008–2010" in one place, "pre-2008" in the tree comment | "uploaded before 2010" |
 | Genius-Lyrics human audio | not shipped (copyrighted) | used in every split |
 | Suno / Udio origin | "closed-source commercial generators" | reused from SONICS |
 | Splits | none published | Default 70/20/10, LOMO; no split file, no seeds |
-| Transforms | "every AI track" | test-set AI tracks only (Appendix A.3) |
+| Transforms | "every AI track" | test-set AI tracks only (Appendix A.3); the shards hold 17,935 files per transform |
 
 Consequences: the Default and LOMO human negatives cannot be rebuilt (half of them, the vocal
 Genius-Lyrics side, is missing), and the paper's test split is unknown, so paper numbers for
