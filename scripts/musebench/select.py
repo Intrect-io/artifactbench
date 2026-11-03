@@ -420,6 +420,23 @@ def build_manifest(selection: dict, ledger: dict[str, dict], root: Path) -> dict
     }, missing
 
 
+EVAL_MANIFEST_REL = Path("manifests") / "musebench_eval_manifest.json"
+
+
+def eval_manifest(runtime: dict) -> dict:
+    """Eval-only copy of the runtime manifest (the runner's --protocol-split has no 'eval')."""
+    # runtime_path: the field the non-finite audit and finite-chunk builder read.
+    tracks = [dict(t, runtime_path=t["path"]) for t in runtime["tracks"]
+              if t["musebench_role"] == "eval"]
+    meta = dict(runtime.get("metadata", {}))
+    meta.update({"n_tracks": len(tracks), "derived_from": str(MANIFEST_REL_DEFAULT),
+                 "roles": {"eval": len(tracks)}})
+    return {"tracks": tracks, "metadata": meta}
+
+
+MANIFEST_REL_DEFAULT = Path("manifests") / "musebench_runtime_manifest.json"
+
+
 def atomic_write_json(path: Path, obj: object) -> None:
     path.parent.mkdir(parents=True, exist_ok=True)
     tmp = path.with_suffix(path.suffix + ".tmp")
@@ -429,7 +446,7 @@ def atomic_write_json(path: Path, obj: object) -> None:
 
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Select MuseBench members / build the manifest.")
-    ap.add_argument("command", choices=["plan", "manifest"])
+    ap.add_argument("command", choices=["plan", "manifest", "eval-manifest"])
     ap.add_argument("--root", type=Path, default=DEFAULT_ROOT)
     ap.add_argument("--budget-gb", type=float, default=170.0,
                     help="cap on all kept audio (eval + train pool), in GB")
@@ -459,6 +476,13 @@ def main(argv: list[str] | None = None) -> int:
         for (role, group), n in sorted(counts.items()):
             print(f"  {role:10s} {group:28s} {n}")
         return 1 if selection["unclassified"] else 0
+
+    if args.command == "eval-manifest":
+        runtime = json.loads((args.root / MANIFEST_REL_DEFAULT).read_text(encoding="utf-8"))
+        out = eval_manifest(runtime)
+        atomic_write_json(args.root / EVAL_MANIFEST_REL, out)
+        print(f"eval manifest: {out['metadata']['n_tracks']} tracks")
+        return 0
 
     selection = json.loads(sel_path.read_text(encoding="utf-8"))
     manifest, missing = build_manifest(selection, load_ledger(args.root), args.root)

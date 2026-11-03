@@ -27,6 +27,8 @@ def main():
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--failures", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--device", default="cpu", choices=["cpu", "cuda"],
+                        help="onnxruntime device for the chunk re-run (default: cpu)")
     args = parser.parse_args()
 
     manifest = json.loads(args.manifest.read_text())
@@ -35,7 +37,7 @@ def main():
     target_ids = [f["track_id"] for f in failures if f.get("stage") == "inference"]
 
     model = ArtifactNetModel(n_chunks=N_CHUNKS_DEFAULT)
-    model.load(device="cpu")
+    model.load(device=args.device)
     audits = []
     for index, track_id in enumerate(target_ids, 1):
         row = rows[track_id]
