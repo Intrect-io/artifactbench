@@ -216,6 +216,14 @@ round-robin within a tier:
 Transforms are never put in the train pool; all of them except PGD can be regenerated from
 clean audio with the Appendix A.3 parameters.
 
+### Acquired corpus (2026-11-04)
+
+With the defaults above (`--budget-gb 170 --free-floor-gb 80`): 64,756 audio files, 169.9 GB —
+33,000 eval rows in 93 sources (91.3 GB) and 31,756 train-pool rows (78.6 GB: 5,000 each of
+AudioLDM2, MAGNeT, JASCO, Mustango, Lyria RealTime and co-created, 877 Jamendo, 879
+OOD-FMA; the budget ran out inside tier 3). Every file's SHA-256 was recomputed and matches the
+fetch ledger. The index allows fetching more of the train pool later with a larger budget.
+
 ### Observations from the shipped files
 
 - Suno and Udio transforms sit under a literal `root/` folder
