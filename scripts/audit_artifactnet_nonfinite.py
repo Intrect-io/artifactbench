@@ -5,12 +5,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
 
-from artifactbench.data.manifest import load_audio_mono
-from artifactbench.models.artifactnet import (
+# Run from a checkout without `pip install -e .`: make the repository importable.
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from artifactbench.data.manifest import load_audio_mono  # noqa: E402
+from artifactbench.models.artifactnet import (  # noqa: E402
     CHUNK_SAMPLES,
     N_CHUNKS_DEFAULT,
     ArtifactNetModel,
