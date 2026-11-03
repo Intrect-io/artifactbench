@@ -90,6 +90,6 @@ def test_cli_runs_isolated_and_reports_failure(tmp_path):
     out = subprocess.run([sys.executable, "-I", str(script), "--root", str(tmp_path), "index"],
                          capture_output=True, text=True)
     assert out.returncode == 1 and "[index] FAIL" in out.stdout
-    out = subprocess.run([sys.executable, "-I", str(script), "--root", str(tmp_path), "acquire"],
+    out = subprocess.run([sys.executable, "-I", str(script), "--root", str(tmp_path), "leak"],
                          capture_output=True, text=True)
     assert out.returncode == 1 and "no verifier yet" in out.stdout
