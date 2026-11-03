@@ -281,6 +281,43 @@ any detector trained on SONICS has seen them. JamendoMaxCaps names match MTG-Jam
 for only a minority of tracks (266 of 3,877 acquired Jamendo rows), so most MuseBench Jamendo
 audio is outside MTG-Jamendo.
 
+## Running a detector
+
+The runner's `--protocol-split` has no `eval` choice, so the eval rows are written to their own
+manifest first. For ArtifactNet the declared primary policy of the frozen v2 protocol applies:
+median of the finite scores of seven 4 s chunks, at least four finite; the strict result (any
+non-finite chunk fails the track) is kept as a sensitivity analysis.
+
+```bash
+python scripts/musebench/select.py eval-manifest --root ~/data/musebench
+python -m artifactbench.bench --model artifactnet \
+    --manifest ~/data/musebench/manifests/musebench_eval_manifest.json \
+    --split all --n-per-source 0 --n-codec-pair 0 --device cuda \
+    --output ~/data/musebench/results/artifactnet_v94
+python scripts/audit_artifactnet_nonfinite.py --device cuda \
+    --manifest ~/data/musebench/manifests/musebench_eval_manifest.json \
+    --failures ~/data/musebench/results/artifactnet_v94/artifactnet/inference_failures.json \
+    --output ~/data/musebench/results/artifactnet_v94/nonfinite_audit.json
+python scripts/build_artifactnet_finite_chunk_result.py --min-valid-chunks 4 \
+    --manifest ~/data/musebench/manifests/musebench_eval_manifest.json \
+    --strict-result ~/data/musebench/results/artifactnet_v94 \
+    --chunk-audit ~/data/musebench/results/artifactnet_v94/nonfinite_audit.json \
+    --output ~/data/musebench/results/artifactnet_v94/finite_chunk
+python scripts/musebench/report.py --root ~/data/musebench
+python scripts/musebench/verify.py --root ~/data/musebench all
+```
+
+`report.py` writes `musebench_report.json` and `.md` next to the run: human (Jamendo) FPR,
+FMA-OOD accuracy, clean-AI FNR per generator, co-created FNR, FNR per transform and per
+transform × generator, AUROC against the Jamendo negatives, Wilson 95 % intervals, all for
+`all`, `seen` and `unseen` rows, plus failure counts. The paper's Table 1 and Table 10 values are
+included for context only. Reports stay in the data root; they are not committed here.
+
+With onnxruntime-gpu installed from pip, the CUDA provider needs the `nvidia/*/lib` folders of
+that environment on `LD_LIBRARY_PATH`; otherwise onnxruntime silently falls back to the CPU
+(about 7× slower for ArtifactNet). CUDA and CPU scores differed by at most 0.016 on a 30-track
+probe, with no decision changes at 0.5.
+
 ## Licenses
 
 - Collection: CC BY-SA 3.0 (inherited from JamendoMaxCaps).
