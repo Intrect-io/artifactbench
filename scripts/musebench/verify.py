@@ -243,6 +243,52 @@ def verify_acquire(root: Path, sha_sample: int = 300, full_sha: bool = False,
     return problems, stats
 
 
+def verify_leak(root: Path) -> tuple[list[str], dict]:
+    """Check the leak report and that every manifest row carries a boolean seen_in_training."""
+    from scripts.musebench import leak_map as lm
+
+    problems: list[str] = []
+    rep_path, man_path = root / lm.REPORT_REL, root / MANIFEST_REL
+    for p in (rep_path, man_path):
+        if not p.exists():
+            problems.append(f"missing {p}")
+    if problems:
+        return problems, {}
+    report = json.loads(rep_path.read_text(encoding="utf-8"))
+    tracks = json.loads(man_path.read_text(encoding="utf-8"))["tracks"]
+
+    if not report.get("model", {}).get("name"):
+        problems.append("leak report does not name the model")
+    manifests = report.get("training_manifests") or []
+    if not manifests or not all(m.get("name") for m in manifests):
+        problems.append("leak report does not name the training manifest(s) it compared against")
+    for key in ("suno_udio", "fma", "jamendo", "inheritance", "scope"):
+        if not report.get("method", {}).get(key):
+            problems.append(f"leak report method lacks '{key}'")
+
+    bad = [t["track_id"] for t in tracks if not isinstance(t.get("seen_in_training"), bool)]
+    if bad:
+        problems.append(f"{len(bad)} manifest rows lack a boolean seen_in_training (e.g. {bad[0]})")
+    incoherent = [t["track_id"] for t in tracks if isinstance(t.get("seen_in_training"), bool)
+                  and t["seen_in_training"] != (t.get("seen_evidence") is not None)]
+    if incoherent:
+        problems.append(f"{len(incoherent)} rows: seen_in_training disagrees with seen_evidence")
+    if report.get("manifest_fingerprint") != lm.manifest_fingerprint(tracks):
+        problems.append("leak report was built from a different manifest")
+    if not bad:
+        recount = lm.per_source_counts(tracks)
+        if recount != report.get("per_source"):
+            problems.append("per-source seen/unseen counts differ from the manifest")
+        if sum(report.get("totals", {}).values()) != len(tracks):
+            problems.append("report totals do not add up to the manifest size")
+    seen = sum(1 for t in tracks if t.get("seen_in_training") is True)
+    stats = {"tracks": len(tracks), "seen": seen, "unseen": len(tracks) - seen,
+             "eval_seen": sum(1 for t in tracks if t.get("seen_in_training") is True
+                              and t.get("musebench_role") == "eval"),
+             "training_manifests": len(manifests)}
+    return problems, stats
+
+
 def not_implemented(stage: str):
     def check(root: Path) -> tuple[list[str], dict]:
         return [f"stage '{stage}' has no verifier yet (later milestone)"], {}
@@ -252,7 +298,7 @@ def not_implemented(stage: str):
 STAGES = {
     "index": verify_index,
     "acquire": verify_acquire,
-    "leak": not_implemented("leak"),
+    "leak": verify_leak,
     "run": not_implemented("run"),
 }
 

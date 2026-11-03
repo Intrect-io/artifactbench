@@ -248,6 +248,39 @@ Rules for the data root (`$MUSEBENCH_ROOT`, default `~/data/musebench`):
 - Nothing derived from MuseBench audio (manifests with local paths, scores, reports) is committed
   to this repository.
 
+## Leak map
+
+`scripts/musebench/leak_map.py` marks every manifest row `seen_in_training` (boolean) for the
+detector under test and writes `$MUSEBENCH_ROOT/leak/leak_report.json`. The detector and its
+training pool are described in `$MUSEBENCH_ROOT/leak/references.json` (machine paths stay out of
+this repository): the model, the training manifest(s) or dataset builder it came from, a SONICS
+`fake_songs` directory, FMA track-id lists, MTG-Jamendo `raw.meta.tsv` with the audio folders
+that were in the pool, and generator-level exposure.
+
+```bash
+python scripts/musebench/leak_map.py --root ~/data/musebench --references ~/data/musebench/leak/references.json
+python scripts/musebench/verify.py --root ~/data/musebench leak
+```
+
+Identity rules:
+
+| MuseBench rows | Key | Confirmation |
+|---|---|---|
+| Suno, Udio | SONICS file name `fake_<id>_<generator>_<seed>` | file size |
+| OOD FMA | FMA track id (leading digits of the file name) | file size vs a local FMA copy, where available |
+| Jamendo | normalised (title, artist) vs MTG-Jamendo `raw.meta.tsv`, any ` - ` split | duration within 2 s |
+
+A transform inherits the flag of its clean track and a co-created remix that of its human
+source. Generations conditioned on a seen track's caption are different audio and are not
+"seen"; exposure to a *generator* is recorded separately in `generator_in_training`. The match
+is against the training **candidate pool**, an upper bound on what a checkpoint saw.
+
+Dataset facts found on the way: all MuseBench Suno and Udio files checked so far (2,000 of
+2,000 in the acquired corpus) have the name **and byte size** of a SONICS `fake_songs` file, so
+any detector trained on SONICS has seen them. JamendoMaxCaps names match MTG-Jamendo metadata
+for only a minority of tracks (266 of 3,877 acquired Jamendo rows), so most MuseBench Jamendo
+audio is outside MTG-Jamendo.
+
 ## Licenses
 
 - Collection: CC BY-SA 3.0 (inherited from JamendoMaxCaps).
