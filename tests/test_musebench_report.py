@@ -95,17 +95,40 @@ def test_markdown_renders_all_sections():
     assert "| magnet | 25.0 [" in md or "| magnet | 20.0 [" in md
 
 
-def test_main_reads_run_dir_and_writes_outputs(tmp_path):
-    rows, probs, failures = cohort()
-    (tmp_path / "manifests").mkdir()
-    (tmp_path / rp.EVAL_MANIFEST_REL).write_text(json.dumps({"tracks": rows}))
-    run = tmp_path / "results" / "artifactnet_v94"
+def write_run(run, probs, failures):
     (run / "artifactnet").mkdir(parents=True)
     (run / "run_manifest.json").write_text(json.dumps({"threshold": 0.5, "input_manifest_sha256": "x"}))
     (run / "artifactnet" / "track_probs.json").write_text(json.dumps(
         [{"track_id": k, "prob": v} for k, v in probs.items()]))
     (run / "artifactnet" / "inference_failures.json").write_text(json.dumps(failures))
+
+
+def test_main_reads_run_dir_and_writes_outputs(tmp_path):
+    rows, probs, failures = cohort()
+    (tmp_path / "manifests").mkdir()
+    (tmp_path / rp.EVAL_MANIFEST_REL).write_text(json.dumps({"tracks": rows}))
+    run = tmp_path / "results" / "artifactnet_v94"
+    write_run(run, probs, failures)
     assert rp.main(["--root", str(tmp_path)]) == 0
     rep = json.loads((run / "musebench_report.json").read_text())
-    assert rep["coverage"]["scored"] == 17 and rep["run"]["input_manifest_sha256"] == "x"
+    assert rep["primary"]["coverage"]["scored"] == 17 and rep["run"]["input_manifest_sha256"] == "x"
+    assert rep["primary"] == rep["strict"]  # no finite-chunk result: primary falls back to strict
     assert (run / "musebench_report.md").read_text().startswith("# ArtifactNet v9.4 on MuseBench")
+
+
+def test_finite_chunk_result_becomes_primary(tmp_path):
+    rows, probs, failures = cohort()
+    (tmp_path / "manifests").mkdir()
+    (tmp_path / rp.EVAL_MANIFEST_REL).write_text(json.dumps({"tracks": rows}))
+    run = tmp_path / "results" / "artifactnet_v94"
+    write_run(run, probs, failures)
+    recovered = dict(probs, bad=0.9)
+    write_run(run / "finite_chunk", recovered, [])
+    (run / "finite_chunk" / "artifactnet" / "finite_chunk_policy.json").write_text(json.dumps(
+        {"track_aggregation": "median of finite", "minimum_valid_chunks": 4, "recovered": [{"track_id": "bad"}]}))
+    assert rp.main(["--root", str(tmp_path)]) == 0
+    rep = json.loads((run / "musebench_report.json").read_text())
+    assert rep["primary"]["coverage"]["scored"] == 18 and rep["strict"]["coverage"]["scored"] == 17
+    assert rep["primary_policy"]["minimum_valid_chunks"] == 4 and "recovered" not in rep["primary_policy"]
+    md = (run / "musebench_report.md").read_text()
+    assert "at least 4 finite chunks" in md and "## Strict sensitivity" in md

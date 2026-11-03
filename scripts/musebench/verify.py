@@ -289,6 +289,70 @@ def verify_leak(root: Path) -> tuple[list[str], dict]:
     return problems, stats
 
 
+RUN_REL = Path("results") / "artifactnet_v94"
+
+
+def verify_run(root: Path, run_rel: Path = RUN_REL) -> tuple[list[str], dict]:
+    """Check the bench run on the whole eval cohort and the MuseBench report built from it."""
+    from artifactbench.models.artifactnet import DEFAULT_HF_REVISION
+    from scripts.musebench import report as rp
+
+    problems: list[str] = []
+    run_dir = root / run_rel
+    eval_path = root / rp.EVAL_MANIFEST_REL
+    needed = [eval_path, run_dir / "run_manifest.json", run_dir / "summary.json",
+              run_dir / "artifactnet" / "track_probs.json",
+              run_dir / "artifactnet" / "inference_failures.json",
+              run_dir / "finite_chunk" / "artifactnet" / "track_probs.json",
+              run_dir / "finite_chunk" / "artifactnet" / "inference_failures.json",
+              run_dir / "finite_chunk" / "artifactnet" / "finite_chunk_policy.json",
+              run_dir / "musebench_report.json", run_dir / "musebench_report.md"]
+    problems += [f"missing {p}" for p in needed if not p.exists()]
+    if problems:
+        return problems, {}
+    eval_rows = json.loads(eval_path.read_text(encoding="utf-8"))["tracks"]
+    eval_ids = {r["track_id"] for r in eval_rows}
+    run_manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
+    summary = json.loads((run_dir / "summary.json").read_text(encoding="utf-8"))
+
+    # The run covered exactly the eval cohort, with the pinned public ONNX build.
+    if set(run_manifest.get("selected_track_ids", [])) != eval_ids:
+        problems.append("run did not select exactly the eval cohort")
+    if run_manifest.get("models") != ["artifactnet"] or run_manifest.get("n_per_source") != 0:
+        problems.append("run is not a full-cohort artifactnet run (models / n_per_source)")
+    if run_manifest.get("threshold") != 0.5:
+        problems.append(f"threshold {run_manifest.get('threshold')} != 0.5")
+    prov = (summary.get("models") or [{}])[0].get("provenance", {})
+    if prov.get("hf_revision") != DEFAULT_HF_REVISION:
+        problems.append(f"model revision {prov.get('hf_revision')} is not the pinned {DEFAULT_HF_REVISION}")
+
+    # Every eval track is either scored or a recorded failure, in strict and primary results.
+    for label, sub in (("strict", run_dir), ("finite_chunk", run_dir / "finite_chunk")):
+        probs, failures, _ = rp.load_run_scores(sub, "artifactnet")
+        failed = {f["track_id"] for f in failures}
+        if set(probs) & failed:
+            problems.append(f"{label}: tracks both scored and failed")
+        if (set(probs) | failed) != eval_ids:
+            problems.append(f"{label}: scored + failed ({len(set(probs) | failed)}) != eval cohort ({len(eval_ids)})")
+        if any(not (0.0 <= p <= 1.0) for p in probs.values()):
+            problems.append(f"{label}: probability outside [0, 1]")
+
+    # The saved report equals a fresh rebuild from the raw scores.
+    saved = json.loads((run_dir / "musebench_report.json").read_text(encoding="utf-8"))
+    fresh = json.loads(json.dumps(rp.build_full_report(eval_rows, run_dir)))
+    for key in ("primary", "strict", "primary_policy"):
+        if saved.get(key) != fresh.get(key):
+            problems.append(f"musebench_report.json '{key}' differs from a rebuild from raw scores")
+    for split in ("all", "seen", "unseen"):
+        if split not in saved.get("primary", {}).get("splits", {}):
+            problems.append(f"report lacks the '{split}' split")
+    cov = saved.get("primary", {}).get("coverage", {})
+    stats = {"eval_rows": len(eval_rows), "scored_primary": cov.get("scored"),
+             "failures_primary": cov.get("failures"),
+             "failures_strict": saved.get("strict", {}).get("coverage", {}).get("failures")}
+    return problems, stats
+
+
 def not_implemented(stage: str):
     def check(root: Path) -> tuple[list[str], dict]:
         return [f"stage '{stage}' has no verifier yet (later milestone)"], {}
@@ -299,7 +363,7 @@ STAGES = {
     "index": verify_index,
     "acquire": verify_acquire,
     "leak": verify_leak,
-    "run": not_implemented("run"),
+    "run": verify_run,
 }
 
 
