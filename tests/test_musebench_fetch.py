@@ -157,3 +157,15 @@ def test_verify_acquire_enforces_free_space_floor(tmp_path):
     fetched_root(tmp_path)
     problems, _ = vf.verify_acquire(tmp_path, free_floor_gb=10 ** 9)
     assert any("below floor" in x for x in problems)
+
+
+def test_torn_ledger_line_is_ignored_and_refetched(tmp_path):
+    blob, shards, sel = build_root(tmp_path)
+    fx.run(tmp_path, sel, shards, 2, 0, reader_factory=reader_for(blob))
+    ledger_path = tmp_path / "selection" / "fetch_ledger.jsonl"
+    lines = ledger_path.read_text().splitlines()
+    victim = json.loads(lines[-1])["path"]
+    ledger_path.write_text("\n".join(lines[:-1]) + "\n" + lines[-1][:20])
+    assert victim not in sl.load_ledger(tmp_path)
+    total, done, failed = fx.run(tmp_path, sel, shards, 2, 0, reader_factory=reader_for(blob))
+    assert (total, done, failed) == (1, 1, [])

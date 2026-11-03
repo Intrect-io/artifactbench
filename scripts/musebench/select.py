@@ -367,9 +367,13 @@ def load_ledger(root: Path) -> dict[str, dict]:
     if path.exists():
         with open(path, encoding="utf-8") as f:
             for line in f:
-                if line.strip():
+                if not line.strip():
+                    continue
+                try:
                     entry = json.loads(line)
-                    ledger[entry["path"]] = entry  # last entry wins
+                except json.JSONDecodeError:
+                    continue  # torn line from an interrupted run: that file is fetched again
+                ledger[entry["path"]] = entry  # last entry wins
     return ledger
 
 
