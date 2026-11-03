@@ -245,6 +245,57 @@ def atomic_write(path: Path, text: str) -> None:
     os.replace(tmp, path)
 
 
+def build_full_report(eval_rows: list[dict], run_dir: Path, model_dir: str = "artifactnet",
+                      finite_subdir: str = "finite_chunk") -> dict:
+    """Primary = declared finite-chunk policy when present, else strict; strict kept as sensitivity."""
+    probs, failures, run_manifest = load_run(run_dir, model_dir)
+    threshold = run_manifest.get("threshold", 0.5)
+    strict = build_report(eval_rows, probs, failures, threshold=threshold)
+    out = {"strict": strict}
+    finite_dir = run_dir / finite_subdir
+    if (finite_dir / model_dir / "track_probs.json").exists():
+        f_probs, f_failures, _ = load_run_scores(finite_dir, model_dir)
+        out["primary"] = build_report(eval_rows, f_probs, f_failures, threshold=threshold)
+        policy_path = finite_dir / model_dir / "finite_chunk_policy.json"
+        policy = json.loads(policy_path.read_text(encoding="utf-8")) if policy_path.exists() else {}
+        out["primary_policy"] = {k: v for k, v in policy.items() if k != "recovered"}
+        out["primary_policy"]["result_dir"] = str(finite_dir)
+    else:
+        out["primary"] = strict
+        out["primary_policy"] = {"track_aggregation": "strict: any non-finite chunk fails the track"}
+    out["run"] = {"run_dir": str(run_dir), "model_dir": model_dir,
+                  "threshold": threshold,
+                  "input_manifest_sha256": run_manifest.get("input_manifest_sha256"),
+                  "runner_git_revision": run_manifest.get("runner_git_revision")}
+    return out
+
+
+def load_run_scores(result_dir: Path, model_dir: str) -> tuple[dict[str, float], list[dict], None]:
+    probs = {t["track_id"]: float(t["prob"]) for t in
+             json.loads((result_dir / model_dir / "track_probs.json").read_text(encoding="utf-8"))}
+    failures = json.loads((result_dir / model_dir / "inference_failures.json").read_text(encoding="utf-8"))
+    return probs, failures, None
+
+
+def full_markdown(full: dict, title: str) -> str:
+    md = to_markdown(full["primary"], title)
+    pol = full["primary_policy"]
+    head = [f"Primary track policy: {pol.get('track_aggregation')}"
+            + (f" (at least {pol['minimum_valid_chunks']} finite chunks)" if "minimum_valid_chunks" in pol else ""),
+            ""]
+    st = full["strict"]["splits"]
+    sens = ["", "## Strict sensitivity (any non-finite chunk fails the track)", "",
+            f"Coverage: {full['strict']['coverage']['scored']} of {full['strict']['coverage']['eval_rows']} "
+            f"scored, {full['strict']['coverage']['failures']} failures.", "",
+            "| Metric | all | seen | unseen |", "|---|---|---|---|"]
+    for key, name in [("human_jamendo_fpr", "Human (Jamendo) FPR"),
+                      ("fma_ood_accuracy", "FMA-OOD accuracy"),
+                      ("clean_ai_fnr", "Clean AI FNR")]:
+        sens.append(f"| {name} | " + " | ".join(pct(st[x][key]) for x in SPLITS) + " |")
+    lines = md.splitlines()
+    return "\n".join(lines[:2] + head + lines[2:] + sens)
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Build the MuseBench report from a bench run.")
     ap.add_argument("--root", type=Path, default=DEFAULT_ROOT)
@@ -255,15 +306,11 @@ def main(argv: list[str] | None = None) -> int:
     args = ap.parse_args(argv)
     run_dir = args.run_dir or args.root / "results" / "artifactnet_v94"
     eval_rows = json.loads((args.root / EVAL_MANIFEST_REL).read_text(encoding="utf-8"))["tracks"]
-    probs, failures, run_manifest = load_run(run_dir, args.model_dir)
-    report = build_report(eval_rows, probs, failures, threshold=run_manifest.get("threshold", 0.5))
-    report["run"] = {"run_dir": str(run_dir), "model_dir": args.model_dir,
-                     "input_manifest_sha256": run_manifest.get("input_manifest_sha256"),
-                     "runner_git_revision": run_manifest.get("runner_git_revision"),
-                     "created_at": time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())}
-    atomic_write(run_dir / "musebench_report.json", json.dumps(report, indent=1) + "\n")
-    atomic_write(run_dir / "musebench_report.md", to_markdown(report, args.title) + "\n")
-    cov = report["coverage"]
+    full = build_full_report(eval_rows, run_dir, args.model_dir)
+    full["run"]["created_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
+    atomic_write(run_dir / "musebench_report.json", json.dumps(full, indent=1) + "\n")
+    atomic_write(run_dir / "musebench_report.md", full_markdown(full, args.title) + "\n")
+    cov = full["primary"]["coverage"]
     print(f"report: {cov['scored']}/{cov['eval_rows']} scored, {cov['failures']} failures, "
           f"{cov['missing']} missing -> {run_dir / 'musebench_report.md'}")
     return 0
