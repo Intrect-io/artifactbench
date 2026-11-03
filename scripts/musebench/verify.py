@@ -14,9 +14,20 @@ under the data root.
 """
 from __future__ import annotations
 
+import os as _os
+import sys as _sys
+
+# This directory holds select.py, which shadows the stdlib ``select`` module when the
+# directory is on sys.path (``python scripts/musebench/x.py`` without -I). Drop it.
+if _sys.path and _os.path.abspath(_sys.path[0] or ".") == _os.path.dirname(_os.path.abspath(__file__)):
+    _sys.path.pop(0)
+
+
 import argparse
+import hashlib
 import json
 import os
+import shutil
 import sys
 from collections import Counter
 from pathlib import Path
@@ -114,6 +125,124 @@ def verify_index(root: Path, expected_parts=EXPECTED_PARTS,
     return problems, stats
 
 
+REQUIRED_ROW_FIELDS = ("track_id", "path", "label", "source", "generator", "variant",
+                       "caption_set", "musebench_role")
+MANIFEST_REL = Path("manifests") / "musebench_runtime_manifest.json"
+
+
+def sha256_file(path: Path) -> str:
+    h = hashlib.sha256()
+    with open(path, "rb") as f:
+        for chunk in iter(lambda: f.read(1 << 20), b""):
+            h.update(chunk)
+    return h.hexdigest()
+
+
+def verify_acquire(root: Path, sha_sample: int = 300, full_sha: bool = False,
+                   free_floor_gb: float | None = None) -> tuple[list[str], dict]:
+    """Check selection determinism, fetched files, and the runtime manifest."""
+    from artifactbench.data.manifest import load_manifest
+    from scripts.musebench import select as sel_mod
+
+    problems: list[str] = []
+    sel_path = root / "selection" / "selection.json"
+    man_path = root / MANIFEST_REL
+    for p in (sel_path, man_path):
+        if not p.exists():
+            problems.append(f"missing {p}")
+    if problems:
+        return problems, {}
+    selection = json.loads(sel_path.read_text(encoding="utf-8"))
+    if selection.get("unclassified"):
+        problems.append(f"{len(selection['unclassified'])} unclassified index members")
+
+    # 1. The selection is reproducible from the index and its recorded parameters.
+    replanned = sel_mod.plan(sel_mod.load_index(root), seed=selection["seed"],
+                             eval_caps=selection["eval_caps"],
+                             train_tiers=selection["train_tiers"],
+                             train_budget_bytes=selection["train_budget_bytes"])
+    if sel_mod.selection_fingerprint(replanned) != sel_mod.selection_fingerprint(selection):
+        problems.append("selection.json is not reproducible from the index (fingerprint differs)")
+
+    # 2. The manifest loads through the runner's loader and covers the selection exactly.
+    entries, by_source = load_manifest(str(man_path), split="all")
+    manifest = json.loads(man_path.read_text(encoding="utf-8"))
+    if manifest.get("metadata", {}).get("selection_fingerprint") != sel_mod.selection_fingerprint(selection):
+        problems.append("manifest was built from a different selection")
+    rows = {r["path"]: r for r in selection["rows"]}
+    seen_ids: set[str] = set()
+    man_paths = set()
+    for e in entries:
+        missing = [k for k in REQUIRED_ROW_FIELDS if e.get(k) in (None, "")]
+        if missing:
+            problems.append(f"{e.get('track_id')}: missing fields {missing}")
+            continue
+        if e["track_id"] in seen_ids:
+            problems.append(f"duplicate track_id {e['track_id']}")
+        seen_ids.add(e["track_id"])
+        if e["label"] not in ("ai", "real") or e["musebench_role"] not in ("eval", "train_pool"):
+            problems.append(f"{e['track_id']}: bad label/role {e['label']}/{e['musebench_role']}")
+        man_paths.add(e["musebench_path"])
+        r = rows.get(e["musebench_path"])
+        if r is None:
+            problems.append(f"manifest row not in selection: {e['musebench_path']!r}")
+            continue
+        if r["musebench_role"] != e["musebench_role"]:
+            problems.append(f"{e['track_id']}: role differs from selection")
+        p = Path(e["path"])
+        if not p.is_file():
+            problems.append(f"missing audio {p}")
+        elif p.stat().st_size != r["size"]:
+            problems.append(f"size mismatch {p}: {p.stat().st_size} != index {r['size']}")
+    absent = set(rows) - man_paths
+    if absent:
+        problems.append(f"{len(absent)} selected members are not in the manifest")
+
+    # 3. Content: SHA-256 of a deterministic sample (or all) equals the ledger/manifest value.
+    ledger = sel_mod.load_ledger(root)
+    ordered = sorted(entries, key=lambda e: e["track_id"])
+    sample = ordered if full_sha else ordered[::max(1, len(ordered) // max(1, sha_sample))]
+    for e in sample:
+        p = Path(e["path"])
+        if not p.is_file():
+            continue
+        digest = sha256_file(p)
+        led = ledger.get(e["musebench_path"], {}).get("sha256")
+        if digest != e.get("sha256") or digest != led:
+            problems.append(f"sha256 mismatch {p}")
+    for m in selection["meta"]:
+        mp = root / "meta" / m["path"]
+        if not mp.is_file() or mp.stat().st_size != m["size"]:
+            problems.append(f"missing or wrong-size metadata file {mp}")
+
+    # 4. Cohort shape: eval counts as planned, roles disjoint by family.
+    eval_counts = Counter(r["group"] for r in selection["rows"] if r["musebench_role"] == "eval")
+    expected = {k: v for k, v in selection["expected_eval_counts"].items() if v}
+    if dict(eval_counts) != expected:
+        problems.append("eval counts differ from expected_eval_counts")
+    eval_fams = {r["family"] for r in selection["rows"] if r["musebench_role"] == "eval"}
+    straddle = [r["path"] for r in selection["rows"]
+                if r["musebench_role"] == "train_pool" and r["family"] in eval_fams]
+    if straddle:
+        problems.append(f"{len(straddle)} train_pool rows share a family with eval rows")
+
+    # 5. Disk policy.
+    budget = selection.get("budget", {})
+    floor = budget.get("free_floor_gb", 80.0) if free_floor_gb is None else free_floor_gb
+    free = shutil.disk_usage(root).free
+    if free < floor * 1e9:
+        problems.append(f"free space {free / 1e9:.1f} GB below floor {floor} GB")
+    kept = sum(r["size"] for r in selection["rows"])
+    if "budget_gb" in budget and kept > budget["budget_gb"] * 1e9:
+        problems.append(f"kept audio {kept / 1e9:.1f} GB exceeds budget {budget['budget_gb']} GB")
+
+    stats = {"tracks": len(entries), "sources": len(by_source),
+             "roles": dict(Counter(e.get("musebench_role") for e in entries)),
+             "kept_gb": round(kept / 1e9, 1), "free_gb": round(free / 1e9, 1),
+             "sha_checked": len(sample)}
+    return problems, stats
+
+
 def not_implemented(stage: str):
     def check(root: Path) -> tuple[list[str], dict]:
         return [f"stage '{stage}' has no verifier yet (later milestone)"], {}
@@ -122,7 +251,7 @@ def not_implemented(stage: str):
 
 STAGES = {
     "index": verify_index,
-    "acquire": not_implemented("acquire"),
+    "acquire": verify_acquire,
     "leak": not_implemented("leak"),
     "run": not_implemented("run"),
 }

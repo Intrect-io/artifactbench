@@ -161,10 +161,13 @@ ArtifactBench evaluates detectors that were not trained on MuseBench. The rules:
    calibration) is selected on MuseBench data.
 2. **Native input.** Each detector receives the audio through its own adapter (for ArtifactNet:
    44.1 kHz, seven 4 s chunks, centre crop), not the paper's 10 s / 48 kHz excerpt.
-3. **Eval cohort** (deterministic, sealed): all Jamendo human tracks, all OOD-FMA tracks,
-   up to 2,000 clean tracks per generator (including Suno and Udio), up to 2,000 co-created
-   tracks, and up to 200 tracks per transform × generator. Rows in the cohort are marked
-   `musebench_role = eval` and must never be used for training.
+3. **Eval cohort** (deterministic, sealed), chosen by `scripts/musebench/select.py`:
+   3,000 Jamendo human tracks, 3,000 OOD-FMA tracks, 1,000 clean tracks per generator (all
+   ten, including Suno and Udio), 1,000 co-created tracks, and 200 tracks per transform ×
+   generator (8 × 10 = 80 groups). Clean AI tracks are drawn from tracks that have transformed
+   variants (the paper's test split), and the transform samples are the transforms of those
+   same tracks, so clean/transform results are paired. Rows in the cohort are marked
+   `musebench_role = eval` (also `protocol_split = eval`) and must never be used for training.
 4. **Leak annotation.** Suno and Udio are SONICS tracks; FMA and Jamendo audio may also appear in
    a detector's training history. Every row carries `seen_in_training` for the detector under
    test, and every metric is reported for seen and unseen rows separately.
@@ -183,7 +186,56 @@ acquired selectively:
 python scripts/musebench/index_shards.py --root ~/data/musebench --workers 75
 # Assert the index is complete and internally consistent.
 python scripts/musebench/verify.py --root ~/data/musebench index
+# Choose the eval cohort and the budgeted train pool (deterministic).
+python scripts/musebench/select.py plan --root ~/data/musebench --budget-gb 170 --free-floor-gb 80
+# Download the chosen members by byte range; resumable, stops at the free-space floor.
+python scripts/musebench/fetch.py --root ~/data/musebench --workers 16 --free-floor-gb 80
+# Write the runtime manifest, then check files, hashes, cohort shape and disk policy.
+python scripts/musebench/select.py manifest --root ~/data/musebench
+python scripts/musebench/verify.py --root ~/data/musebench acquire
 ```
+
+### Families and the train pool
+
+Every member is assigned a *family*: the source track it derives from (`caption_set/base
+name`; Suno and Udio tracks are their own family). A Jamendo song, its co-created remix, every
+generation conditioned on its caption and every transform of those generations share one
+family. Selection is ordered by `sha256(seed:family)`, so the same families are preferred
+across generators, and the **train pool excludes every family that has an eval member**.
+
+The train pool fills the remaining disk budget in priority tiers, each source up to a cap,
+round-robin within a tier:
+
+1. generators that are new to most detectors' training data: AudioLDM2, MAGNeT, JASCO,
+   Mustango, Lyria RealTime (5,000 each);
+2. co-created (5,000);
+3. human Jamendo (3,000) and OOD-FMA (2,000);
+4. MusicGen, Riffusion, Stable Audio Open (2,000 each);
+5. Suno and Udio: none (they are SONICS tracks, usually available locally already).
+
+Transforms are never put in the train pool; all of them except PGD can be regenerated from
+clean audio with the Appendix A.3 parameters.
+
+### Acquired corpus (2026-11-04)
+
+With the defaults above (`--budget-gb 170 --free-floor-gb 80`): 64,756 audio files, 169.9 GB —
+33,000 eval rows in 93 sources (91.3 GB) and 31,756 train-pool rows (78.6 GB: 5,000 each of
+AudioLDM2, MAGNeT, JASCO, Mustango, Lyria RealTime and co-created, 877 Jamendo, 879
+OOD-FMA; the budget ran out inside tier 3). Every file's SHA-256 was recomputed and matches the
+fetch ledger. The index allows fetching more of the train pool later with a larger budget.
+
+### Observations from the shipped files
+
+- Suno and Udio transforms sit under a literal `root/` folder
+  (`aac_generated_music/suno_generated_music/root/…`); PGD files have no caption-set folder and
+  are named `adv_<clean name>`; the PGD folders for MAGNeT and MusicGen are lower case.
+- Transform file names end with the transform parameters (`_aac128`, `_mp3128`, `_ogg3`,
+  `_eq-cut_low`, `_pt-ps+2st-ts0.9`, `_lnLUFS-14`, `_gn0.0025`). The Gaussian files say
+  `gn0.0025`, while Appendix A.3 states σ = 0.025.
+- The shipped CSVs (`Caption/captions-*.csv`, `Genius-Lyrics/metadata.csv`,
+  `Genius-Lyrics/segments.csv`, `Jamendo/segments.csv`) carry captions, segment descriptions and
+  YouTube ids only. The per-track Jamendo `license_ccurl` that the card mentions is **not**
+  shipped; manifest rows carry `license_ccurl: null` until it is joined from JamendoMaxCaps.
 
 Rules for the data root (`$MUSEBENCH_ROOT`, default `~/data/musebench`):
 
@@ -200,7 +252,8 @@ Rules for the data root (`$MUSEBENCH_ROOT`, default `~/data/musebench`):
 
 - Collection: CC BY-SA 3.0 (inherited from JamendoMaxCaps).
 - Jamendo audio: per-track Creative Commons licenses (CC BY, BY-SA, BY-NC, BY-NC-ND), recorded
-  in the `license_ccurl` metadata; NC and ND tracks restrict commercial use and derivatives.
+  in JamendoMaxCaps' `license_ccurl` metadata (not shipped with MuseBench); NC and ND tracks
+  restrict commercial use and derivatives.
 - FMA audio: per-track Creative Commons licenses; FMA metadata CC BY 4.0.
 - AI audio: bound by each generator's terms; most open weights are non-commercial
   (MusicGen / MAGNeT / JASCO weights CC BY-NC 4.0, AudioLDM and Mustango CC BY-NC-SA 4.0,

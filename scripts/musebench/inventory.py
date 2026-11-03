@@ -10,6 +10,15 @@ Groups regular files by their first ``--depth`` path components (default 2, e.g.
 """
 from __future__ import annotations
 
+import os as _os
+import sys as _sys
+
+# This directory holds select.py, which shadows the stdlib ``select`` module when the
+# directory is on sys.path (``python scripts/musebench/x.py`` without -I). Drop it.
+if _sys.path and _os.path.abspath(_sys.path[0] or ".") == _os.path.dirname(_os.path.abspath(__file__)):
+    _sys.path.pop(0)
+
+
 import argparse
 import json
 import os
