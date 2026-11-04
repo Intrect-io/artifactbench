@@ -100,7 +100,7 @@ def split_of(row: dict) -> str:
 
 
 def build_report(eval_rows: list[dict], probs: dict[str, float], failures: list[dict],
-                 threshold: float = 0.5) -> dict:
+                 threshold: float = 0.5, decisions: dict[str, bool] | None = None) -> dict:
     """Pure function: eval manifest rows + {track_id: prob} + failures -> report dict."""
     failed = {f["track_id"] for f in failures}
     scored = [dict(r, prob=probs[r["track_id"]]) for r in eval_rows if r["track_id"] in probs]
@@ -111,6 +111,9 @@ def build_report(eval_rows: list[dict], probs: dict[str, float], failures: list[
         return [r for r in scored if pred(r) and (split == "all" or split_of(r) == split)]
 
     def called_ai(r):
+        # An explicit per-track decision (e.g. a pipeline with a rescue gate) overrides prob >= threshold.
+        if decisions is not None and r["track_id"] in decisions:
+            return decisions[r["track_id"]]
         return r["prob"] >= threshold
 
     def neg_probs(split):
@@ -123,7 +126,8 @@ def build_report(eval_rows: list[dict], probs: dict[str, float], failures: list[
         out["prob_median"] = sorted(r["prob"] for r in rs)[len(rs) // 2] if rs else None
         return out
 
-    report: dict = {"threshold": threshold, "splits": {}}
+    report: dict = {"threshold": threshold, "splits": {},
+                    "decision_rule": "explicit per-track decision" if decisions else f"prob >= {threshold}"}
     for split in SPLITS:
         hum = rows(split, lambda r: r["source"] == HUMAN_NEG)
         fma = rows(split, lambda r: r["source"] == FMA)
@@ -239,6 +243,14 @@ def load_run(run_dir: Path, model_dir: str = "artifactnet") -> tuple[dict[str, f
     return probs, failures, run_manifest
 
 
+def load_decisions(result_dir: Path, model_dir: str) -> dict[str, bool] | None:
+    """Explicit per-track decisions (``decision_ai``) if the score file carries them."""
+    rows = json.loads((result_dir / model_dir / "track_probs.json").read_text(encoding="utf-8"))
+    if rows and all("decision_ai" in t for t in rows):
+        return {t["track_id"]: bool(t["decision_ai"]) for t in rows}
+    return None
+
+
 def atomic_write(path: Path, text: str) -> None:
     tmp = path.with_suffix(path.suffix + ".tmp")
     tmp.write_text(text, encoding="utf-8")
@@ -250,12 +262,14 @@ def build_full_report(eval_rows: list[dict], run_dir: Path, model_dir: str = "ar
     """Primary = declared finite-chunk policy when present, else strict; strict kept as sensitivity."""
     probs, failures, run_manifest = load_run(run_dir, model_dir)
     threshold = run_manifest.get("threshold", 0.5)
-    strict = build_report(eval_rows, probs, failures, threshold=threshold)
+    strict = build_report(eval_rows, probs, failures, threshold=threshold,
+                          decisions=load_decisions(run_dir, model_dir))
     out = {"strict": strict}
     finite_dir = run_dir / finite_subdir
     if (finite_dir / model_dir / "track_probs.json").exists():
         f_probs, f_failures, _ = load_run_scores(finite_dir, model_dir)
-        out["primary"] = build_report(eval_rows, f_probs, f_failures, threshold=threshold)
+        out["primary"] = build_report(eval_rows, f_probs, f_failures, threshold=threshold,
+                                      decisions=load_decisions(finite_dir, model_dir))
         policy_path = finite_dir / model_dir / "finite_chunk_policy.json"
         policy = json.loads(policy_path.read_text(encoding="utf-8")) if policy_path.exists() else {}
         out["primary_policy"] = {k: v for k, v in policy.items() if k != "recovered"}
