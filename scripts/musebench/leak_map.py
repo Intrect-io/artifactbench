@@ -245,9 +245,14 @@ def annotate(tracks: list[dict], *, sonics: dict[str, int], fma_ids: set[int],
             size = sonics.get(base)
             if size is not None:
                 stats["sonics_name_match"] += 1
-                same = size == t["size"]
-                stats["sonics_size_equal" if same else "sonics_size_differs"] += 1
-                seen_family[t["family"]] = f"SONICS file {base} ({'same size' if same else 'size differs'})"
+                if size == UNKNOWN_SIZE:  # named by a training manifest, file not on this host
+                    stats["sonics_size_unknown"] += 1
+                    note = "size not checked: training file not on this host"
+                else:
+                    same = size == t["size"]
+                    stats["sonics_size_equal" if same else "sonics_size_differs"] += 1
+                    note = "same size" if same else "size differs"
+                seen_family[t["family"]] = f"SONICS file {base} ({note})"
         elif t["source"] == "musebench_human_fma_ood":
             fid = fma_id(base)
             if fid is not None and fid in fma_ids:

@@ -225,6 +225,10 @@ def test_annotate_keyed_keeps_the_unkeyed_annotation():
     assert seen[("musebench_human_fma_ood", "20000_y")] is True
     assert seen[("musebench_human_jamendo", "Other - Art")] is True
     gen = {r["generator"]: r["generator_in_training_prod"] for r in rows}
+    stats = lm.annotate_keyed(rows, "unk", **dict(kw, sonics={"fake_00001_suno_0": lm.UNKNOWN_SIZE}))
+    assert stats["sonics_size_unknown"] == 1 and "sonics_size_differs" not in stats
+    suno = [r for r in rows if r["source"] == "musebench_suno"][0]
+    assert suno["seen_in_training_unk"] is True and "not checked" in suno["seen_evidence_unk"]
     assert gen["magnet"] is True and gen["suno"] is False
     lm.annotate_keyed(rows, "prod", **dict(kw, fma_ids=set()))  # idempotent: stale keyed fields replaced
     assert all(r["seen_in_training_prod"] is False or r["source"] != "musebench_human_fma_ood" for r in rows)
