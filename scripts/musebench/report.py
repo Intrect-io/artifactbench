@@ -95,12 +95,34 @@ def auroc(pos: list[float], neg: list[float]) -> float | None:
 
 # --------------------------------------------------------------------------- report
 
-def split_of(row: dict) -> str:
-    return "seen" if row["seen_in_training"] else "unseen"
+SEEN_FIELD = "seen_in_training"
+RUNTIME_MANIFEST_REL = Path("manifests") / "musebench_runtime_manifest.json"
+
+
+def split_of(row: dict, seen_field: str = SEEN_FIELD) -> str:
+    return "seen" if row[seen_field] else "unseen"
+
+
+def attach_seen_field(eval_rows: list[dict], root: Path, seen_field: str) -> list[dict]:
+    """Eval rows carrying `seen_field`. A model-specific annotation (leak_map.py --model-key) is written
+    to the runtime manifest only, so the eval manifest a run consumed is never rewritten; missing values
+    are joined from there by track id. A row without the field is an error, not "unseen"."""
+    if all(seen_field in r for r in eval_rows):
+        return eval_rows
+    runtime = json.loads((root / RUNTIME_MANIFEST_REL).read_text(encoding="utf-8"))["tracks"]
+    by_id = {t["track_id"]: t for t in runtime}
+    out = []
+    for r in eval_rows:
+        src = r if seen_field in r else by_id.get(r["track_id"], {})
+        if not isinstance(src.get(seen_field), bool):
+            raise ValueError(f"eval row {r['track_id']} has no boolean {seen_field}")
+        out.append(r if src is r else dict(r, **{seen_field: src[seen_field]}))
+    return out
 
 
 def build_report(eval_rows: list[dict], probs: dict[str, float], failures: list[dict],
-                 threshold: float = 0.5, decisions: dict[str, bool] | None = None) -> dict:
+                 threshold: float = 0.5, decisions: dict[str, bool] | None = None,
+                 seen_field: str = SEEN_FIELD) -> dict:
     """Pure function: eval manifest rows + {track_id: prob} + failures -> report dict."""
     failed = {f["track_id"] for f in failures}
     scored = [dict(r, prob=probs[r["track_id"]]) for r in eval_rows if r["track_id"] in probs]
@@ -108,7 +130,7 @@ def build_report(eval_rows: list[dict], probs: dict[str, float], failures: list[
                if r["track_id"] not in probs and r["track_id"] not in failed]
 
     def rows(split: str, pred) -> list[dict]:
-        return [r for r in scored if pred(r) and (split == "all" or split_of(r) == split)]
+        return [r for r in scored if pred(r) and (split == "all" or split_of(r, seen_field) == split)]
 
     def called_ai(r):
         # An explicit per-track decision (e.g. a pipeline with a rescue gate) overrides prob >= threshold.
@@ -160,7 +182,7 @@ def build_report(eval_rows: list[dict], probs: dict[str, float], failures: list[
         "missing": len(missing), "failure_rate": len(failures) / len(eval_rows) if eval_rows else None,
         "failures_by_source": dict(sorted(by_src_fail.items())),
         "failures_by_stage": dict(Counter(f.get("stage", "?") for f in failures)),
-        "seen_rows": sum(1 for r in eval_rows if r["seen_in_training"]),
+        "seen_rows": sum(1 for r in eval_rows if r[seen_field]),
     }
     report["paper_context"] = {"table10_fma_ood_accuracy": PAPER_TABLE10,
                                "table1_columns": PAPER_TABLE1_COLS, "table1_fnr": PAPER_TABLE1,
@@ -258,18 +280,18 @@ def atomic_write(path: Path, text: str) -> None:
 
 
 def build_full_report(eval_rows: list[dict], run_dir: Path, model_dir: str = "artifactnet",
-                      finite_subdir: str = "finite_chunk") -> dict:
+                      finite_subdir: str = "finite_chunk", seen_field: str = SEEN_FIELD) -> dict:
     """Primary = declared finite-chunk policy when present, else strict; strict kept as sensitivity."""
     probs, failures, run_manifest = load_run(run_dir, model_dir)
     threshold = run_manifest.get("threshold", 0.5)
     strict = build_report(eval_rows, probs, failures, threshold=threshold,
-                          decisions=load_decisions(run_dir, model_dir))
+                          decisions=load_decisions(run_dir, model_dir), seen_field=seen_field)
     out = {"strict": strict}
     finite_dir = run_dir / finite_subdir
     if (finite_dir / model_dir / "track_probs.json").exists():
         f_probs, f_failures, _ = load_run_scores(finite_dir, model_dir)
         out["primary"] = build_report(eval_rows, f_probs, f_failures, threshold=threshold,
-                                      decisions=load_decisions(finite_dir, model_dir))
+                                      decisions=load_decisions(finite_dir, model_dir), seen_field=seen_field)
         policy_path = finite_dir / model_dir / "finite_chunk_policy.json"
         policy = json.loads(policy_path.read_text(encoding="utf-8")) if policy_path.exists() else {}
         out["primary_policy"] = {k: v for k, v in policy.items() if k != "recovered"}
@@ -278,7 +300,7 @@ def build_full_report(eval_rows: list[dict], run_dir: Path, model_dir: str = "ar
         out["primary"] = strict
         out["primary_policy"] = {"track_aggregation": "strict: any non-finite chunk fails the track"}
     out["run"] = {"run_dir": str(run_dir), "model_dir": model_dir,
-                  "threshold": threshold,
+                  "threshold": threshold, "seen_field": seen_field,
                   "input_manifest_sha256": run_manifest.get("input_manifest_sha256"),
                   "runner_git_revision": run_manifest.get("runner_git_revision")}
     return out
@@ -317,10 +339,15 @@ def main(argv: list[str] | None = None) -> int:
                     help="bench output directory (default: <root>/results/artifactnet_v94)")
     ap.add_argument("--model-dir", default="artifactnet")
     ap.add_argument("--title", default="ArtifactNet v9.4 on MuseBench (zero-shot)")
+    ap.add_argument("--seen-field", default=SEEN_FIELD,
+                    help="row field that splits seen/unseen, e.g. seen_in_training_<key> from "
+                         "leak_map.py --model-key (joined from the runtime manifest when the eval "
+                         "manifest lacks it)")
     args = ap.parse_args(argv)
     run_dir = args.run_dir or args.root / "results" / "artifactnet_v94"
     eval_rows = json.loads((args.root / EVAL_MANIFEST_REL).read_text(encoding="utf-8"))["tracks"]
-    full = build_full_report(eval_rows, run_dir, args.model_dir)
+    eval_rows = attach_seen_field(eval_rows, args.root, args.seen_field)
+    full = build_full_report(eval_rows, run_dir, args.model_dir, seen_field=args.seen_field)
     full["run"]["created_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     atomic_write(run_dir / "musebench_report.json", json.dumps(full, indent=1) + "\n")
     atomic_write(run_dir / "musebench_report.md", full_markdown(full, args.title) + "\n")

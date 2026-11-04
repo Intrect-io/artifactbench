@@ -172,3 +172,89 @@ def test_verify_leak_requires_named_training_manifests(leak_root):
     (leak_root / lm.REPORT_REL).write_text(json.dumps(rep))
     problems, _ = vf.verify_leak(leak_root)
     assert any("training manifest" in p for p in problems)
+
+
+# ----------------------------------------------------------------------- lineage + model key
+
+def test_lineage_identity_kinds():
+    assert lm.lineage_identity("/d/sonics/fake_songs/fake_21689_suno_1.mp3") == ("sonics", "fake_21689_suno_1")
+    assert lm.lineage_identity("fake_songs/fake_00002_udio_1") == ("sonics", "fake_00002_udio_1")
+    assert lm.lineage_identity("/a/fma_full/000/000708.mp3") == ("fma", 708)
+    assert lm.lineage_identity("cell:mp3_128:fma_full_s1:10000") == ("fma", 10000)
+    assert lm.lineage_identity("/m/mtg_jamendo/extracted/05/5.mp3") == ("mtg", 5)
+    assert lm.lineage_identity("jamendo_full/00/6") == ("mtg", 6)
+    assert lm.lineage_identity("/x/udio/123.mp3") is None  # a numeric stem outside FMA/Jamendo
+    assert lm.lineage_identity("/x/fma_full/abc.mp3") is None
+    assert lm.lineage_identity(None) is None
+
+
+def test_load_lineage_reads_every_manifest_shape(tmp_path):
+    sonics_file = tmp_path / "fake_00001_suno_0.mp3"
+    sonics_file.write_bytes(b"s" * 111)
+    split_manifest = tmp_path / "m1.json"
+    split_manifest.write_text(json.dumps({
+        "seed": 1, "epoch_caps": {"fma_full": 5},
+        "train": [{"path": str(sonics_file), "label": "ai"},
+                  {"path": "/a/fma_full/010/010000.mp3", "track_id": "fma_full/010/010000"}],
+        "val": [{"path": "/m/mtg_jamendo/extracted/05/5.mp3"}],
+        "codec_cells": {"mp3_128": [{"path": "/c/x.wav", "track_id": "cell:mp3_128:fma_full_s1:20000",
+                                     "origin_path": "/a/fma_full/030/030000.mp3"}]}}))
+    list_manifest = tmp_path / "m2.json"
+    list_manifest.write_text(json.dumps(["/s/fake_00002_udio_1.mp3", {"source_path": "/j/jamendo/7.mp3"}]))
+    sonics, fma, mtg, per = lm.load_lineage([split_manifest, list_manifest])
+    assert sonics == {"fake_00001_suno_0": 111, "fake_00002_udio_1": lm.UNKNOWN_SIZE}
+    assert fma == {10000, 20000, 30000}
+    assert mtg == {5, 7}
+    assert per == {str(split_manifest): 4, str(list_manifest): 2}
+    empty = tmp_path / "m3.json"
+    empty.write_text(json.dumps({"seed": 1}))
+    with pytest.raises(ValueError):
+        lm.load_lineage([empty])
+
+
+def test_annotate_keyed_keeps_the_unkeyed_annotation():
+    rows = corpus_rows()
+    annotate(rows)  # first model: unkeyed fields
+    before = [{k: r.get(k) for k in lm.LEAK_FIELDS} for r in rows]
+    kw = dict(sonics={}, fma_ids={20000}, mtg_meta={("other", "art"): {6}}, mtg_pool={6: Path("/m/6.mp3")},
+              mtg_all={6: Path("/m/6.mp3")}, generators_in_training={"magnet": True})
+    lm.annotate_keyed(rows, "prod", **kw)
+    assert [{k: r.get(k) for k in lm.LEAK_FIELDS} for r in rows] == before
+    seen = {(r["source"], r["base_key"]): r["seen_in_training_prod"] for r in rows}
+    assert seen[("musebench_suno", "fake_00001_suno_0")] is False
+    assert seen[("musebench_human_fma_ood", "20000_y")] is True
+    assert seen[("musebench_human_jamendo", "Other - Art")] is True
+    gen = {r["generator"]: r["generator_in_training_prod"] for r in rows}
+    stats = lm.annotate_keyed(rows, "unk", **dict(kw, sonics={"fake_00001_suno_0": lm.UNKNOWN_SIZE}))
+    assert stats["sonics_size_unknown"] == 1 and "sonics_size_differs" not in stats
+    suno = [r for r in rows if r["source"] == "musebench_suno"][0]
+    assert suno["seen_in_training_unk"] is True and "not checked" in suno["seen_evidence_unk"]
+    assert gen["magnet"] is True and gen["suno"] is False
+    lm.annotate_keyed(rows, "prod", **dict(kw, fma_ids=set()))  # idempotent: stale keyed fields replaced
+    assert all(r["seen_in_training_prod"] is False or r["source"] != "musebench_human_fma_ood" for r in rows)
+    with pytest.raises(ValueError):
+        lm.annotate_keyed(rows, "Bad-Key", **kw)
+
+
+def test_main_with_model_key_and_lineage_refs(leak_root, tmp_path):
+    lineage = tmp_path / "gen1.json"
+    lineage.write_text(json.dumps({"train": [{"path": "/a/fma_full/020/020000.mp3"},
+                                             {"path": "/m/mtg_jamendo/extracted/50/6.mp3"}]}))
+    base = json.loads((leak_root / "leak" / "references.json").read_text())
+    refs = {"model": {"name": "Det v2"}, "training_manifests": [{"name": "gen1", "path": str(lineage)}],
+            "lineage_manifests": [str(lineage)], "mtg_meta_tsv": base["mtg_meta_tsv"],
+            "mtg_audio_dir": base["mtg_audio_dir"], "generators_in_training": {}}
+    ref_path = leak_root / "leak" / "references_prod.json"
+    ref_path.write_text(json.dumps(refs))
+    v1_report = (leak_root / lm.REPORT_REL).read_text()
+    assert lm.main(["--root", str(leak_root), "--references", str(ref_path), "--model-key", "prod",
+                    "--no-duration-check"]) == 0
+    rep = json.loads((leak_root / lm.report_rel("prod")).read_text())
+    assert rep["seen_field"] == "seen_in_training_prod" and rep["model"]["name"] == "Det v2"
+    assert rep["totals"] == {"seen": 2, "unseen": 7}  # FMA 20000 and Jamendo "Other - Art"
+    assert rep["eval_seen"] == 2
+    assert rep["reference_corpora"]["fma_ids"] == 1 and rep["reference_corpora"]["mtg_ids_local"] == 1
+    assert (leak_root / lm.REPORT_REL).read_text() == v1_report  # the first model's report is untouched
+    man = json.loads((leak_root / vf.MANIFEST_REL).read_text())
+    assert man["metadata"]["leak_annotations"]["prod"]["seen_field"] == "seen_in_training_prod"
+    assert vf.verify_leak(leak_root)[0] == []  # the unkeyed annotation still verifies

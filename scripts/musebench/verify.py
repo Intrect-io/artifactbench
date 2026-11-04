@@ -353,6 +353,113 @@ def verify_run(root: Path, run_rel: Path = RUN_REL) -> tuple[list[str], dict]:
     return problems, stats
 
 
+# The production run is private: which run directory and model key it uses is read from the data
+# root, so no internal model name lives in this public repository.
+PRODUCTION_SPEC_REL = Path("results") / "production_run.json"
+PRODUCTION_SCORES = "scores.jsonl"
+
+
+def verify_production(root: Path) -> tuple[list[str], dict]:
+    """Check an externally scored production run: raw score lines cover the eval cohort, the import
+    accounts for every track with an explicit decision, the model-specific leak annotation is
+    current, and the saved report equals a rebuild split by that annotation.
+
+    `<root>/results/production_run.json` names the run: {"run_dir": "results/<name>",
+    "model_key": "<key used with leak_map.py --model-key>", "model_dir": "artifactnet"}."""
+    import hashlib
+
+    from scripts.musebench import leak_map as lm
+    from scripts.musebench import report as rp
+
+    spec_path = root / PRODUCTION_SPEC_REL
+    if not spec_path.exists():
+        return [f"missing {spec_path}"], {}
+    spec = json.loads(spec_path.read_text(encoding="utf-8"))
+    run_rel, model_key, model_dir = Path(spec["run_dir"]), spec["model_key"], spec.get("model_dir", "artifactnet")
+    problems: list[str] = []
+    run_dir = root / run_rel
+    seen_field = lm.keyed("seen_in_training", model_key)
+    rep_path = root / lm.report_rel(model_key)
+    needed = [root / rp.EVAL_MANIFEST_REL, root / MANIFEST_REL, rep_path, run_dir / PRODUCTION_SCORES,
+              run_dir / "run_manifest.json", run_dir / model_dir / "track_probs.json",
+              run_dir / model_dir / "inference_failures.json",
+              run_dir / "musebench_report.json", run_dir / "musebench_report.md"]
+    problems += [f"missing {p}" for p in needed if not p.exists()]
+    if problems:
+        return problems, {}
+    eval_rows = json.loads((root / rp.EVAL_MANIFEST_REL).read_text(encoding="utf-8"))["tracks"]
+    eval_ids = {r["track_id"] for r in eval_rows}
+    runtime = json.loads((root / MANIFEST_REL).read_text(encoding="utf-8"))["tracks"]
+    run_manifest = json.loads((run_dir / "run_manifest.json").read_text(encoding="utf-8"))
+
+    # Raw score lines: one per eval track, unchanged since the import.
+    scores_path = run_dir / PRODUCTION_SCORES
+    lines = [json.loads(x) for x in scores_path.read_text(encoding="utf-8").splitlines() if x.strip()]
+    paths = [ln.get("path") for ln in lines]
+    if len(lines) != len(eval_rows):
+        problems.append(f"{PRODUCTION_SCORES} has {len(lines)} rows, eval cohort has {len(eval_rows)}")
+    if set(paths) != {r["path"] for r in eval_rows} or len(set(paths)) != len(paths):
+        problems.append(f"{PRODUCTION_SCORES} paths are not exactly the eval cohort (once each)")
+    if run_manifest.get("scores_sha256") != hashlib.sha256(scores_path.read_bytes()).hexdigest():
+        problems.append(f"{PRODUCTION_SCORES} changed after it was imported (scores_sha256)")
+    if set(run_manifest.get("selected_track_ids", [])) != eval_ids:
+        problems.append("run manifest does not select exactly the eval cohort")
+    if not run_manifest.get("decision_field"):
+        problems.append("run manifest records no decision field (import without the pipeline's verdict)")
+
+    # Import: every eval track scored (with an explicit decision) or a recorded failure.
+    track_probs = json.loads((run_dir / model_dir / "track_probs.json").read_text(encoding="utf-8"))
+    failures = json.loads((run_dir / model_dir / "inference_failures.json").read_text(encoding="utf-8"))
+    scored, failed = {t["track_id"] for t in track_probs}, {f["track_id"] for f in failures}
+    if scored & failed:
+        problems.append("tracks both scored and failed")
+    if (scored | failed) != eval_ids:
+        problems.append(f"scored + failed ({len(scored | failed)}) != eval cohort ({len(eval_ids)})")
+    no_decision = [t["track_id"] for t in track_probs if not isinstance(t.get("decision_ai"), bool)]
+    if no_decision:
+        problems.append(f"{len(no_decision)} scores carry no boolean decision_ai (e.g. {no_decision[0]})")
+    if any(not (0.0 <= float(t["prob"]) <= 1.0) for t in track_probs):
+        problems.append("probability outside [0, 1]")
+
+    # Model-specific leak annotation: present on every row, coherent, and the report is current.
+    report = json.loads(rep_path.read_text(encoding="utf-8"))
+    evid = lm.keyed("seen_evidence", model_key)
+    bad = [t["track_id"] for t in runtime if not isinstance(t.get(seen_field), bool)]
+    if bad:
+        problems.append(f"{len(bad)} manifest rows lack a boolean {seen_field} (e.g. {bad[0]})")
+    elif any(t[seen_field] != (t.get(evid) is not None) for t in runtime):
+        problems.append(f"{seen_field} disagrees with {evid}")
+    if report.get("manifest_fingerprint") != lm.manifest_fingerprint(runtime):
+        problems.append(f"{rep_path.name} was built from a different manifest")
+    if report.get("seen_field") != seen_field or not report.get("training_manifests"):
+        problems.append(f"{rep_path.name} does not name its seen field and training manifests")
+    if not bad:
+        if lm.per_source_counts(runtime, seen_field) != report.get("per_source"):
+            problems.append(f"per-source counts differ from {rep_path.name}")
+    if not all(isinstance(t.get("seen_in_training"), bool) for t in runtime):
+        problems.append("the unkeyed seen_in_training annotation was lost")
+
+    # The saved report equals a rebuild split by the model-specific field.
+    eval_seen = None
+    if not bad:
+        rows = rp.attach_seen_field(eval_rows, root, seen_field)
+        eval_seen = sum(1 for r in rows if r[seen_field])
+        if report.get("eval_seen") != eval_seen:
+            problems.append(f"{rep_path.name} eval_seen {report.get('eval_seen')} != manifest {eval_seen}")
+        saved = json.loads((run_dir / "musebench_report.json").read_text(encoding="utf-8"))
+        fresh = json.loads(json.dumps(rp.build_full_report(rows, run_dir, model_dir, seen_field=seen_field)))
+        for key in ("primary", "strict", "primary_policy"):
+            if saved.get(key) != fresh.get(key):
+                problems.append(f"musebench_report.json '{key}' differs from a rebuild split by {seen_field}")
+        if saved.get("run", {}).get("seen_field") != seen_field:
+            problems.append(f"musebench_report.json was not split by {seen_field}")
+    cov = json.loads((run_dir / "musebench_report.json").read_text(encoding="utf-8")).get("primary", {}).get(
+        "coverage", {})
+    stats = {"score_lines": len(lines), "scored": len(scored), "failures": len(failures),
+             "eval_seen": eval_seen, "report_seen_rows": cov.get("seen_rows"), "seen_field": seen_field}
+    return problems, stats
+
+
 def not_implemented(stage: str):
     def check(root: Path) -> tuple[list[str], dict]:
         return [f"stage '{stage}' has no verifier yet (later milestone)"], {}
@@ -364,6 +471,7 @@ STAGES = {
     "acquire": verify_acquire,
     "leak": verify_leak,
     "run": verify_run,
+    "production": verify_production,
 }
 
 

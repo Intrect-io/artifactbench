@@ -281,6 +281,26 @@ any detector trained on SONICS has seen them. JamendoMaxCaps names match MTG-Jam
 for only a minority of tracks (266 of 3,877 acquired Jamendo rows), so most MuseBench Jamendo
 audio is outside MTG-Jamendo.
 
+### A second detector: lineage manifests and a model key
+
+A detector's real history is the chain of training manifests of every generation in its weight
+lineage, not a candidate-pool directory. A references JSON may list them as `lineage_manifests`
+(plus `mtg_meta_tsv` and `mtg_audio_dir`); their rows are read by `path`, `track_id` and the
+`origin_*` fields of derived rows (codec cells such as `cell:<cell>:<source>:<id>`), and yield
+SONICS stems, FMA ids and MTG-Jamendo ids by the same identity rules. The union over train, val
+and test rows is an upper bound on exposure for the manifests listed; a lineage step whose
+manifest is missing makes it a lower bound, which the references' `caveats` should say.
+
+`--model-key KEY` writes `seen_in_training_KEY` (and the other annotation fields with the same
+suffix) and `leak/leak_report_KEY.json`, so the first model's unkeyed annotation and report stay
+as they are. A SONICS name whose training file is not on this host counts as
+`sonics_size_unknown` rather than a size mismatch.
+
+```bash
+python scripts/musebench/leak_map.py --root ~/data/musebench \
+    --references ~/data/musebench/leak/references_<key>.json --model-key <key>
+```
+
 ## Running a detector
 
 The runner's `--protocol-split` has no `eval` choice, so the eval rows are written to their own
@@ -330,6 +350,32 @@ With onnxruntime-gpu installed from pip, the CUDA provider needs the `nvidia/*/l
 that environment on `LD_LIBRARY_PATH`; otherwise onnxruntime silently falls back to the CPU
 (about 7× slower for ArtifactNet). CUDA and CPU scores differed by at most 0.016 on a 30-track
 probe, with no decision changes at 0.5.
+
+### Externally scored runs
+
+A pipeline that is not wrapped by `artifactbench.bench` (for example a production stack with its
+own batch runner and decision rule) writes one JSON line per file with `path`, `probability`, a
+decision field and `error`. `import_scores.py` turns that into the runner's result layout, keeping
+the pipeline's own decision per track (`decision_ai`), which `report.py` honours over
+`prob >= threshold`. Tracks with no line or a failing decision value become recorded failures.
+`report.py --seen-field` splits seen/unseen by a model-keyed annotation; the field is joined from
+the runtime manifest by track id, so the eval manifest a run consumed is never rewritten.
+
+```bash
+python scripts/musebench/import_scores.py --root ~/data/musebench \
+    --scores ~/data/musebench/results/<run>/scores.jsonl --run-dir ~/data/musebench/results/<run> \
+    --model-name <name> --threshold <tau> --decision-field verdict
+python scripts/musebench/report.py --root ~/data/musebench --run-dir ~/data/musebench/results/<run> \
+    --seen-field seen_in_training_<key>
+python scripts/musebench/verify.py --root ~/data/musebench production
+```
+
+`verify.py production` reads which run and model key to check from
+`$MUSEBENCH_ROOT/results/production_run.json` (`{"run_dir": "results/<run>", "model_key": "<key>"}`),
+so private model names stay in the data root. It checks that the score lines cover the eval cohort
+once each and are unchanged since the import, that scored plus failed tracks equal the cohort with
+an explicit decision on every score, that the keyed leak annotation is present, coherent and current,
+and that the saved report equals a rebuild split by the keyed field. It is part of `verify.py all`.
 
 ## Licenses
 
