@@ -92,4 +92,4 @@ def test_cli_runs_isolated_and_reports_failure(tmp_path):
     assert out.returncode == 1 and "[index] FAIL" in out.stdout
     out = subprocess.run([sys.executable, "-I", str(script), "--root", str(tmp_path), "run"],
                          capture_output=True, text=True)
-    assert out.returncode == 1 and "no verifier yet" in out.stdout
+    assert out.returncode == 1 and "[run] FAIL" in out.stdout and "missing" in out.stdout

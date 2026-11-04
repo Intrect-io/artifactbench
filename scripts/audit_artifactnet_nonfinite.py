@@ -5,12 +5,18 @@ from __future__ import annotations
 
 import argparse
 import json
+import sys
 from pathlib import Path
 
 import numpy as np
 
-from artifactbench.data.manifest import load_audio_mono
-from artifactbench.models.artifactnet import (
+# Run from a checkout without `pip install -e .`: make the repository importable.
+_REPO_ROOT = Path(__file__).resolve().parents[1]
+if str(_REPO_ROOT) not in sys.path:
+    sys.path.insert(0, str(_REPO_ROOT))
+
+from artifactbench.data.manifest import load_audio_mono  # noqa: E402
+from artifactbench.models.artifactnet import (  # noqa: E402
     CHUNK_SAMPLES,
     N_CHUNKS_DEFAULT,
     ArtifactNetModel,
@@ -27,6 +33,8 @@ def main():
     parser.add_argument("--manifest", type=Path, required=True)
     parser.add_argument("--failures", type=Path, required=True)
     parser.add_argument("--output", type=Path, required=True)
+    parser.add_argument("--device", default="cpu", choices=["cpu", "cuda"],
+                        help="onnxruntime device for the chunk re-run (default: cpu)")
     args = parser.parse_args()
 
     manifest = json.loads(args.manifest.read_text())
@@ -35,7 +43,7 @@ def main():
     target_ids = [f["track_id"] for f in failures if f.get("stage") == "inference"]
 
     model = ArtifactNetModel(n_chunks=N_CHUNKS_DEFAULT)
-    model.load(device="cpu")
+    model.load(device=args.device)
     audits = []
     for index, track_id in enumerate(target_ids, 1):
         row = rows[track_id]
