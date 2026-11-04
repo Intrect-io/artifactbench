@@ -53,6 +53,11 @@ def main():
                 "policy": f"requires at least {args.min_valid_chunks} finite chunks",
             })
 
+    # Failures the chunk audit does not cover (decode, resolve, ...) stay failures; dropping
+    # them would make tracks silently disappear from the result.
+    audited = {track["track_id"] for track in audit["tracks"]}
+    unresolved.extend(f for f in strict_failures if f["track_id"] not in audited)
+
     args.output.mkdir(parents=True, exist_ok=True)
     model_dir = args.output / "artifactnet"
     model_dir.mkdir(exist_ok=True)
