@@ -307,6 +307,19 @@ python scripts/musebench/report.py --root ~/data/musebench
 python scripts/musebench/verify.py --root ~/data/musebench all
 ```
 
+The audit re-runs each failed track chunk by chunk and is decode-bound; it can be run in
+parallel on shards of the failure list and merged back with the same schema:
+
+```bash
+python scripts/musebench/merge_audits.py split --shards 4 \
+    --failures ~/data/musebench/results/artifactnet_v94/artifactnet/inference_failures.json \
+    --out-dir ~/data/musebench/results/artifactnet_v94/audit_shards
+python scripts/musebench/merge_audits.py merge \
+    --failures ~/data/musebench/results/artifactnet_v94/artifactnet/inference_failures.json \
+    --out ~/data/musebench/results/artifactnet_v94/nonfinite_audit.json \
+    ~/data/musebench/results/artifactnet_v94/audit_shards/audit_0.json
+```
+
 `report.py` writes `musebench_report.json` and `.md` next to the run: human (Jamendo) FPR,
 FMA-OOD accuracy, clean-AI FNR per generator, co-created FNR, FNR per transform and per
 transform × generator, AUROC against the Jamendo negatives, Wilson 95 % intervals, all for
