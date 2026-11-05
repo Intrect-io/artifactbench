@@ -1,0 +1,13 @@
+{
+ "description": "Example gate spec for scripts/musebench/compare.py. Every threshold here is a PLACEHOLDER: fix your own before the candidate is scored, and do not tune them on MuseBench results.",
+ "rules": [
+  {"name": "human FPR ceiling", "metric": "human_jamendo_fpr", "split": "all", "max": 0.05,
+   "note": "absolute ceiling on false positives among Jamendo human tracks"},
+  {"name": "human FPR does not regress", "metric": "human_jamendo_fpr", "split": "all", "max_increase": 0.005},
+  {"name": "FMA-OOD accuracy floor", "metric": "fma_ood_accuracy", "split": "all", "min": 0.95},
+  {"name": "unseen clean FNR does not regress", "metric": "clean_ai_fnr", "split": "unseen", "max_increase": 0.0},
+  {"name": "target generator improves", "metric": "clean_fnr", "generator": "lyria_rt", "split": "unseen",
+   "min_decrease": 0.10, "note": "per-generator rule; generator names follow report.py GENERATOR_ORDER"},
+  {"name": "AUROC floor", "metric": "auroc_clean_ai_vs_jamendo", "split": "unseen", "min": 0.80}
+ ]
+}
