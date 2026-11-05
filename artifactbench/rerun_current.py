@@ -3,6 +3,7 @@ import argparse
 from collections import Counter, defaultdict
 import hashlib
 import json
+import os
 from pathlib import Path
 import random
 import subprocess
@@ -29,7 +30,12 @@ def write_json(path, value):
     path.write_text(json.dumps(value, ensure_ascii=False, indent=2) + "\n")
 
 
-def main():
+ARTIFACTNET_REPO_ENV = "ARTIFACTBENCH_ARTIFACTNET_REPO"
+FMA_FULL_ROOT_ENV = "ARTIFACTBENCH_FMA_FULL_ROOT"
+
+
+def parse_args(argv=None):
+    """Parse the CLI; the private ArtifactNet tree and the local fma_full root have no built-in location."""
     ap = argparse.ArgumentParser(description=__doc__)
     ap.add_argument("--output", required=True, type=Path)
     ap.add_argument("--device", default="cuda")
@@ -37,10 +43,26 @@ def main():
     ap.add_argument("--codec-pairs", type=int, default=50)
     ap.add_argument("--recover-fma-from", type=Path,
                     help="reuse verified track results and retry HTML-disguised FMA files using local fma_full")
-    args = ap.parse_args()
+    ap.add_argument("--artifactnet-repo", type=Path, default=os.environ.get(ARTIFACTNET_REPO_ENV),
+                    help=f"private ArtifactNet source tree (default: ${ARTIFACTNET_REPO_ENV})")
+    ap.add_argument("--fma-full-root", type=Path, default=os.environ.get(FMA_FULL_ROOT_ENV),
+                    help=f"local fma_full root used by --recover-fma-from (default: ${FMA_FULL_ROOT_ENV})")
+    args = ap.parse_args(argv)
+    if args.artifactnet_repo is None:
+        ap.error(f"the ArtifactNet source tree is required: pass --artifactnet-repo or set {ARTIFACTNET_REPO_ENV}")
+    if args.recover_fma_from is not None and args.fma_full_root is None:
+        ap.error(f"--recover-fma-from needs the local fma_full root: pass --fma-full-root or set {FMA_FULL_ROOT_ENV}")
+    args.artifactnet_repo = Path(args.artifactnet_repo).expanduser()
+    if args.fma_full_root is not None:
+        args.fma_full_root = Path(args.fma_full_root).expanduser()
+    return args
+
+
+def main(argv=None):
+    args = parse_args(argv)
     out = args.output
     out.mkdir(parents=True, exist_ok=True)
-    rd = Path('/home/unohee/dev/ArtifactNet')
+    rd = args.artifactnet_repo
     sys.path.insert(0, str(rd))
     import src.pipeline.infer as infer
     from src.pipeline import model_config as config
@@ -103,7 +125,7 @@ def main():
                 assert p.stem.isdigit() and len(p.stem) == 6
                 with p.open('rb') as fh:
                     assert fh.read(30).lstrip().lower().startswith(b'<!doctype html')
-                original = Path('/media/unohee/Archive/dataset/fma_full') / p.stem[:3] / p.name
+                original = args.fma_full_root / p.stem[:3] / p.name
                 assert original.is_file()
                 recovered[r['path']] = str(original)
         parent_files = [parent / 'provenance.json', parent / 'rows.jsonl', snapshot]

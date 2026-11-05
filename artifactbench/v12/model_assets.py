@@ -7,9 +7,16 @@ import subprocess
 from .common import digest
 
 
-def asset_location(variable, default):
-    """경로만 기계별로 바꾸며, 실제 구현과 가중치의 해시 검사는 유지한다."""
-    return Path(os.environ.get(variable, default)).expanduser().resolve()
+def asset_location(variable, default=None):
+    """Machine-specific location of an external asset; hash checks on its code and weights still apply.
+
+    The environment variable wins; ``default`` is used only when it is given. Without either the call
+    raises, naming the variable, rather than looking in a directory that exists on one machine only.
+    """
+    location = os.environ.get(variable) or default
+    if not location:
+        raise ValueError(f'Set {variable} to the location of this asset (no default is assumed)')
+    return Path(location).expanduser().resolve()
 
 
 def source_identity(path):
@@ -42,7 +49,7 @@ def build_pinned(name, snapshots_path):
         return str(path)
     if name == 'artifactnet':
         import sys
-        root = asset_location('ARTIFACTBENCH_ARTIFACTNET_REPO', '/home/unohee/dev/ArtifactNet')
+        root = asset_location('ARTIFACTBENCH_ARTIFACTNET_REPO')
         sys.path.insert(0, str(root))
         from src.pipeline import model_config as cfg
         import src.pipeline.infer as infer
@@ -67,13 +74,13 @@ def build_pinned(name, snapshots_path):
     elif name == 'deezer_ismir':
         model = DeezerISMIRModel(onnx_path=str(Path(snapshot('lofcz/ai-music-detector')) / 'ai_music_detector.onnx'))
     elif name == 'clam':
-        root = asset_location('ARTIFACTBENCH_CLAM_REPO', '/home/unohee/dev/MoM-CLAM')
+        root = asset_location('ARTIFACTBENCH_CLAM_REPO')
         evidence['source_repos']['MoM-CLAM'] = source_identity(root)
         model = CLAMModel(clam_repo=str(root), clam_ckpt=local(root / 'model_wts/best_model_triplet_loss_margin_0.2.pth'),
                     mert_repo=snapshot('m-a-p/MERT-v1-95M'),
                     wav2vec_repo=snapshot('m3hrdadfi/wav2vec2-base-100k-gtzan-music-genres'))
     elif name == 'fst':
-        root = asset_location('ARTIFACTBENCH_FST_REPO', '/home/unohee/dev/FST-AI-music-detection')
+        root = asset_location('ARTIFACTBENCH_FST_REPO')
         evidence['source_repos']['FST'] = source_identity(root)
         model = FSTModel(fst_repo=str(root), stage1_ckpt=local(root / 'checkpoints/backbone_stage1.ckpt'),
                     stage2_ckpt=local(root / 'checkpoints/classifier_stage2.ckpt'),

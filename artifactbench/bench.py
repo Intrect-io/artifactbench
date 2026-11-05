@@ -9,8 +9,8 @@ Usage:
     # Four-model comparison (CLAM requires --clam-repo + --clam-ckpt)
     python -m artifactbench.bench \
         --model artifactnet --model spectttra --model clam \
-        --clam-repo ~/dev/MoM-CLAM \
-        --clam-ckpt ~/dev/MoM-CLAM/model_wts/best_model_triplet_loss_margin_0.2.pth \
+        --clam-repo ./MoM-CLAM \
+        --clam-ckpt ./MoM-CLAM/model_wts/best_model_triplet_loss_margin_0.2.pth \
         --manifest manifest.json --output out/
 
     # Smoke test with tiny sample
@@ -39,6 +39,7 @@ from .models import (
     BenchModel,
     CLAMModel,
     DeezerISMIRModel,
+    FSTModel,
     SpecTTTraModel,
 )
 from .report.markdown import comparison_report, single_model_report
@@ -63,6 +64,12 @@ def build_model(model_name: str, args) -> "BenchModel":
         return DeezerISMIRModel(
             onnx_path=args.deezer_onnx,
             hf_revision=args.deezer_revision,
+        )
+    if model_name == "fst":
+        return FSTModel(
+            fst_repo=args.fst_repo,
+            stage1_ckpt=args.fst_stage1_ckpt,
+            stage2_ckpt=args.fst_stage2_ckpt,
         )
     cls = MODEL_REGISTRY[model_name]
     return cls()
@@ -169,7 +176,7 @@ def run_single_model(model, entries, by_source, args):
     }
 
 
-def main():
+def build_parser() -> argparse.ArgumentParser:
     parser = argparse.ArgumentParser(description="ArtifactBench v2-compatible runner")
     parser.add_argument("--model", action="append", required=True,
                         choices=list(MODEL_REGISTRY.keys()),
@@ -208,8 +215,18 @@ def main():
                         help="path to cloned MoM-CLAM repository")
     parser.add_argument("--clam-ckpt", default=None,
                         help="path to CLAM checkpoint (.pth)")
+    parser.add_argument("--fst-repo", default=None,
+                        help="path to cloned FST-AI-music-detection repository "
+                             "(default: $ARTIFACTBENCH_FST_REPO)")
+    parser.add_argument("--fst-stage1-ckpt", default=None,
+                        help="FST stage-1 checkpoint (default: <fst-repo>/checkpoints/backbone_stage1.ckpt)")
+    parser.add_argument("--fst-stage2-ckpt", default=None,
+                        help="FST stage-2 checkpoint (default: <fst-repo>/checkpoints/classifier_stage2.ckpt)")
+    return parser
 
-    args = parser.parse_args()
+
+def main(argv=None):
+    args = build_parser().parse_args(argv)
 
     np.random.seed(args.seed)
     torch.manual_seed(args.seed)
