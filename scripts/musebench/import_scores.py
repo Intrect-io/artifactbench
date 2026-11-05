@@ -4,7 +4,7 @@
 #          into the run-directory layout report.py reads, so detectors that do not run inside
 #          artifactbench.bench can be reported on the same MuseBench eval cohort.
 # Dependencies: standard library only.
-# Test Status: tests/test_musebench_import_scores.py
+# Test Status: tests/test_musebench_import_scores.py, tests/test_musebench_cohort.py
 """Import external MuseBench scores.
 
     python scripts/musebench/import_scores.py --root ~/data/musebench \\
@@ -31,7 +31,13 @@ import hashlib  # noqa: E402
 import json  # noqa: E402
 import os  # noqa: E402
 import sys  # noqa: E402
+import importlib.util  # noqa: E402
 from pathlib import Path  # noqa: E402
+
+# cohort.py by file path: this directory is not on sys.path when the script runs (see above).
+_spec = importlib.util.spec_from_file_location("musebench_cohort", Path(__file__).with_name("cohort.py"))
+cohort = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(cohort)
 
 DEFAULT_ROOT = Path(os.environ.get("MUSEBENCH_ROOT", "~/data/musebench")).expanduser()
 EVAL_MANIFEST_REL = Path("manifests") / "musebench_eval_manifest.json"
@@ -83,11 +89,24 @@ def main(argv: list[str] | None = None) -> int:
     ap.add_argument("--decision-field", default=None)
     ap.add_argument("--ai-value", default="ai")
     ap.add_argument("--fail-values", nargs="*", default=["unknown", "unreliable"])
+    ap.add_argument("--cohort", type=Path, default=None,
+                    help="JSON list of track ids (or {\"track_ids\": [...]}): import only these eval rows; "
+                         "scores of other eval rows are ignored, coverage is relative to the cohort")
     args = ap.parse_args(argv)
     man_path = args.root / EVAL_MANIFEST_REL
     eval_rows = json.loads(man_path.read_text(encoding="utf-8"))["tracks"]
     with open(args.scores, encoding="utf-8") as f:
         lines = [json.loads(x) for x in f if x.strip()]
+    cohort_info, outside = None, 0
+    if args.cohort is not None:
+        ids = cohort.load(args.cohort)
+        all_paths = {r["path"] for r in eval_rows}
+        eval_rows = cohort.restrict(eval_rows, ids)
+        kept = {r["path"] for r in eval_rows}
+        # a score for an eval row outside the cohort is expected (the scorer ran the full set), not unmatched
+        outside = sum(1 for x in lines if x.get("path") in all_paths and x.get("path") not in kept)
+        lines = [x for x in lines if x.get("path") in kept or x.get("path") not in all_paths]
+        cohort_info = cohort.info(args.cohort, ids)
     probs, failures, unmatched = convert(eval_rows, lines, decision_field=args.decision_field,
                                          ai_value=args.ai_value, fail_values=tuple(args.fail_values))
     out = args.run_dir / args.model_dir
@@ -103,9 +122,12 @@ def main(argv: list[str] | None = None) -> int:
         "threshold": args.threshold, "decision_field": args.decision_field,
         "n_per_source": 0, "selected_track_ids": [r["track_id"] for r in eval_rows],
     }
+    if cohort_info is not None:
+        run_manifest["cohort"] = cohort_info
     (args.run_dir / "run_manifest.json").write_text(json.dumps(run_manifest, indent=1) + "\n",
                                                     encoding="utf-8")
-    print(f"imported {len(probs)} scores, {len(failures)} failures, {len(unmatched)} unmatched paths")
+    print(f"imported {len(probs)} scores, {len(failures)} failures, {len(unmatched)} unmatched paths"
+          + (f", cohort {cohort_info['size']} rows ({outside} scores outside it ignored)" if cohort_info else ""))
     return 1 if unmatched else 0
 
 
