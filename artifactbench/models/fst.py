@@ -15,6 +15,7 @@ Reference: https://github.com/Mippia/FST-AI-music-detection
 Paper:     arXiv:2601.13647
 """
 import gc
+import os
 import sys
 from contextlib import contextmanager
 from pathlib import Path
@@ -63,7 +64,9 @@ def pinned_mert_loaders(module, snapshot):
             setattr(module, n, originals[n])
 
 
-FST_REPO_DEFAULT = "/home/unohee/dev/FST-AI-music-detection"
+# Location of a clone of https://github.com/Mippia/FST-AI-music-detection. There is no default: the
+# adapter imports that repository's code, so it must be told where the clone lives.
+FST_REPO_ENV = "ARTIFACTBENCH_FST_REPO"
 STAGE1_CKPT_DEFAULT = "checkpoints/backbone_stage1.ckpt"
 STAGE2_CKPT_DEFAULT = "checkpoints/classifier_stage2.ckpt"
 
@@ -77,6 +80,17 @@ FILE2BEATS_RELOAD = 20   # File2Beats 재생성 주기 (메모리 누수 방지)
 MAX_DURATION_SEC = 90
 
 
+def resolve_fst_repo(fst_repo: str | Path | None = None) -> Path:
+    """The FST clone: the argument, else ``$ARTIFACTBENCH_FST_REPO``; an error names both when neither is set."""
+    location = fst_repo if fst_repo else os.environ.get(FST_REPO_ENV)
+    if not location:
+        raise ValueError(
+            "FST needs a clone of https://github.com/Mippia/FST-AI-music-detection: pass --fst-repo "
+            f"(FSTModel(fst_repo=...)) or set {FST_REPO_ENV}"
+        )
+    return Path(location).expanduser()
+
+
 class FSTModel(BenchModel):
     """FST (Mippia 2025) — two-stage MERT + Fusion Segment Transformer."""
 
@@ -87,12 +101,12 @@ class FSTModel(BenchModel):
     paper_ref = "arXiv:2601.13647"
 
     def __init__(self,
-                 fst_repo: str = FST_REPO_DEFAULT,
+                 fst_repo: str | None = None,
                  stage1_ckpt: str | None = None,
                  stage2_ckpt: str | None = None,
                  mert_path: str | None = None,
                  beat_checkpoint: str | None = None):
-        self.fst_repo = Path(fst_repo)
+        self.fst_repo = resolve_fst_repo(fst_repo)
         self.stage1_ckpt = stage1_ckpt or str(self.fst_repo / STAGE1_CKPT_DEFAULT)
         self.stage2_ckpt = stage2_ckpt or str(self.fst_repo / STAGE2_CKPT_DEFAULT)
         # Pinned local MERT snapshot (v12.model_assets); None keeps the upstream Hub lookup.

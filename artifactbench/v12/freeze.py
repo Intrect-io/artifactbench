@@ -8,6 +8,7 @@ import sys
 from urllib.parse import urlsplit, urlunsplit
 
 from .common import digest, manifest_rows, rank, write_once
+from .model_assets import asset_location
 from .duplicates import Groups, entry_key, compare_waveforms
 from .inventory import EXPOSURE_INPUTS
 from .review_duplicates import full_audio
@@ -54,8 +55,10 @@ def recording_groups(entries, audit, review):
     return labels, representatives
 
 
-def local_exposure_audit(entries, inventory):
-    root = Path('/home/unohee/dev/ArtifactNet')
+def local_exposure_audit(entries, inventory, artifactnet_repo=None):
+    # The exposure inputs are training manifests inside the private ArtifactNet tree; its location comes
+    # from --artifactnet-repo or ARTIFACTBENCH_ARTIFACTNET_REPO (hash checks below still pin the content).
+    root = asset_location('ARTIFACTBENCH_ARTIFACTNET_REPO', artifactnet_repo)
     sys.path.insert(0, str(root))
     from src.data.dataset_guard import stem_key, same_seed_different_generator
     findings, input_hashes = [], {}
@@ -113,6 +116,9 @@ def main():
     ap = argparse.ArgumentParser(description=__doc__)
     for argument in ('selection', 'validation', 'duplicates', 'review', 'inventory', 'variants', 'variant-validation', 'output'):
         ap.add_argument('--'+argument, required=True, type=Path)
+    ap.add_argument('--artifactnet-repo', type=Path, default=None,
+                    help='private ArtifactNet tree holding the exposure manifests '
+                         '(default: $ARTIFACTBENCH_ARTIFACTNET_REPO)')
     args = ap.parse_args()
     entries = json.loads(args.selection.read_text())['bench']
     variations = json.loads(args.variants.read_text())['bench']
@@ -136,7 +142,7 @@ def main():
     if review['pairs_reviewed'] != audit['perceptual_candidates']:
         raise ValueError('All fingerprint candidates need explicit review')
     inventory = json.loads(args.inventory.read_text())
-    exposure = local_exposure_audit(entries, inventory)
+    exposure = local_exposure_audit(entries, inventory, args.artifactnet_repo)
     if exposure['candidate_collisions']:
         raise ValueError('Unresolved exposure ID candidates require investigation')
     groups, representatives = recording_groups(entries, audit, review)

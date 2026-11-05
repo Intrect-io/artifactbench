@@ -78,14 +78,16 @@ absolute paths is not portable by itself; acquire the same revisions into the
 new machine's cache and retain its new location manifest.
 
 Three source checkouts and the BeatThis checkpoint are separate assets. Their
-locations can be set with these environment variables before model creation:
+locations are set with these environment variables before model creation. The
+three source checkouts have no built-in location: when a variable is unset, model
+creation stops with an error naming it.
 
 | Variable | Required content |
 |---|---|
 | `ARTIFACTBENCH_ARTIFACTNET_REPO` | Matching ArtifactNet checkout, `src`, and checkpoint files selected by its pinned `model_config` |
 | `ARTIFACTBENCH_CLAM_REPO` | MoM-CLAM checkout and `model_wts/best_model_triplet_loss_margin_0.2.pth` |
 | `ARTIFACTBENCH_FST_REPO` | FST checkout and `checkpoints/{backbone_stage1,classifier_stage2}.ckpt` |
-| `ARTIFACTBENCH_BEAT_CHECKPOINT` | BeatThis `final0.ckpt` |
+| `ARTIFACTBENCH_BEAT_CHECKPOINT` | BeatThis `final0.ckpt` (default `.tools/beat-this/final0.ckpt`) |
 
 Overrides change paths only: the factory still hashes all used files and source.
 The [external-asset acquisition and verification workflow](EXTERNAL_ASSETS_v1.2.md)

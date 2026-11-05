@@ -6,7 +6,7 @@
 # Test Status: tests/test_check_docs.py
 """Documentation checker.
 
-Link check: relative ``[text](target)`` links in README.md, NOTICE.md, docs/*.md and
+Link check: relative ``[text](target)`` links in README.md, NOTICE.md, RESULTS_8WAY.md, docs/*.md and
 paper/README.md must point at an existing file or directory (anchors and URLs skipped).
 
 Flag check: in fenced code blocks, commands of the form ``python -m pkg.mod ...`` or
@@ -22,7 +22,7 @@ import sys
 from pathlib import Path
 
 ROOT = Path(__file__).resolve().parents[1]
-DOC_GLOBS = ("README.md", "NOTICE.md", "docs/*.md", "paper/README.md")
+DOC_GLOBS = ("README.md", "NOTICE.md", "RESULTS_8WAY.md", "docs/*.md", "paper/README.md")
 
 LINK_RE = re.compile(r"(?<!!)\[[^\]\n]*\]\(([^)\s]+)(?:\s+\"[^\"]*\")?\)")
 FENCE_RE = re.compile(r"^(\s*)(```|~~~)")
