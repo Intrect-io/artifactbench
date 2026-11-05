@@ -377,6 +377,56 @@ once each and are unchanged since the import, that scored plus failed tracks equ
 an explicit decision on every score, that the keyed leak annotation is present, coherent and current,
 and that the saved report equals a rebuild split by the keyed field. It is part of `verify.py all`.
 
+## Cohorts, comparison and gates
+
+A detector change is judged by comparing two reports, a **baseline** and a **candidate**, with gates
+written down before the candidate is scored. `compare.py` only compares like with like:
+
+- **Same cohort.** A report on the whole sealed eval cohort is identified by the eval manifest it
+  consumed (`run.input_manifest_sha256`) and its row count (`coverage.eval_rows`). A report
+  restricted to a sample cohort (a pilot run) records `run.cohort` with the cohort's `sha256` and
+  `size`, and is only comparable with a report on that same sample. Mixing a pilot sample with a
+  full-cohort baseline would mix populations, so the comparison is refused (exit 2).
+- **Same seen/unseen partition.** Both reports must use the same `run.seen_field` (a report without
+  the key uses `seen_in_training`). Two detectors with different training lineages are compared by
+  building both reports with the same `report.py --seen-field`.
+
+```bash
+python -I scripts/musebench/compare.py \
+    --baseline ~/data/musebench/results/<baseline>/musebench_report.json \
+    --candidate ~/data/musebench/results/<candidate>/musebench_report.json \
+    --gates ~/data/musebench/gates/<spec>.json \
+    --out ~/data/musebench/results/<candidate>/compare_vs_<baseline> \
+    --section primary
+```
+
+`comparison.json` and `comparison.md` list, for the all / seen / unseen splits, every headline
+metric (`human_jamendo_fpr`, `fma_ood_accuracy`, `clean_ai_fnr`, `co_created_fnr`,
+`balanced_accuracy_clean`, `auroc_clean_ai_vs_jamendo`) and every generator's clean FNR and AUROC,
+with the baseline value, the candidate value, the delta (candidate minus baseline) and each side's
+Wilson 95 % interval. Rate deltas also carry Newcombe's hybrid-score interval; it treats the two
+runs as independent samples, so on one shared cohort it is wider than a paired interval would be.
+Both files stay in the data root like every other MuseBench-derived output.
+
+A gate spec is a JSON object with a `rules` list. Each rule names a `metric`, an optional `split`
+(`all` by default) and, for `clean_fnr` / `auroc_vs_jamendo`, a `generator`, plus one or more
+comparators, all in rate units (0.05 = 5 points):
+
+| Comparator | Passes when |
+|---|---|
+| `max` | candidate ≤ value |
+| `min` | candidate ≥ value |
+| `max_increase` | candidate − baseline ≤ value |
+| `min_decrease` | baseline − candidate ≥ value |
+
+[`examples/musebench_gates.example.json`](examples/musebench_gates.example.json) shows the shape;
+its thresholds are placeholders. Exit codes: 0 when every rule passes (or no `--gates` is given),
+3 when at least one rule fails (the comparison is still written), 2 for invalid input (cohort or
+seen-field mismatch, a malformed spec, an unknown metric or generator, or a metric with no rows in
+a report it needs). Fix the spec before scoring the candidate and keep it, with its sha256 (recorded
+in `comparison.json`), next to the result; a threshold chosen after seeing MuseBench numbers turns
+the eval cohort into a tuning set.
+
 ## Licenses
 
 - Collection: CC BY-SA 3.0 (inherited from JamendoMaxCaps).
