@@ -229,7 +229,7 @@ python scripts/check_docs.py
 
 Tests marked `slow` need network access, model weights, or inference, and are
 not run in CI; run them with `python -m pytest -m slow`. `check_docs.py` checks
-that every relative link in `README.md`, `NOTICE.md`, `docs/*.md` and
+that every relative link in `README.md`, `NOTICE.md`, `RESULTS_8WAY.md`, `docs/*.md` and
 `paper/README.md` resolves, and that every `--flag` in a documented
 `python -m ...` or `python scripts/....py` command is accepted by that program.
 Use `python scripts/check_docs.py --skip-flags` to check links only.

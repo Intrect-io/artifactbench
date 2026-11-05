@@ -15,8 +15,23 @@ v1.1 purged test partition (n = 2,224; see `v1.1/RESULTS_v1.1.md`).
 | DeepFense EAT+Nes2Net (FakeMusicCaps) | — | [`DeepFense/FakeMusicCaps_EAT_Nes2Net_NoAug_Seed42`](https://huggingface.co/DeepFense/FakeMusicCaps_EAT_Nes2Net_NoAug_Seed42) (Kheir et al., arXiv:2604.08450) |
 
 Adapters: `artifactbench/models/{ast_60s,deepfense,deezer_ismir,fst,spectttra_variants}.py`.
-Run with `--model ast_60s --model deepfense --model deezer_ismir --model fst --model spectttra_beta5s`
-alongside the existing `--model artifactnet --model spectttra --model clam`.
+CLAM and FST import their upstream code, so both need a local clone (with the checkpoints obtained as
+each upstream README describes); FST reads its clone from `--fst-repo` or `ARTIFACTBENCH_FST_REPO`.
+
+```bash
+git clone https://github.com/StarkVision-AI/MoM-CLAM ./MoM-CLAM
+git clone https://github.com/Mippia/FST-AI-music-detection ./FST-AI-music-detection
+
+python -m artifactbench.bench \
+    --model artifactnet --model spectttra --model clam \
+    --model ast_60s --model deepfense --model deezer_ismir --model fst --model spectttra_beta5s \
+    --clam-repo ./MoM-CLAM \
+    --clam-ckpt ./MoM-CLAM/model_wts/best_model_triplet_loss_margin_0.2.pth \
+    --fst-repo ./FST-AI-music-detection \
+    --manifest v1.1/artifactbench_v1.1_test_purged.json \
+    --split test \
+    --output results/eight_way
+```
 
 ## Results (n = 2,104: 1,388 AI / 716 real, τ = 0.5)
 
