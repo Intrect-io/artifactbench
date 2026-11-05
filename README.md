@@ -129,6 +129,55 @@ MODEL_REGISTRY["mine"] = MyDetector
 # then: python -m artifactbench.bench --model mine ...
 ```
 
+## Zero-shot evaluation on MuseBench
+
+[MuseBench](docs/MUSEBENCH.md) is a separate, larger benchmark (clean, transformed and
+co-created AI music from many generators). ArtifactBench ships the tooling to evaluate a
+detector on its sealed eval cohort zero-shot; [docs/MUSEBENCH.md](docs/MUSEBENCH.md) has the
+dataset notes, the cohort rules and the full protocol.
+
+Data-root rule: everything MuseBench-derived lives under one data root, `$MUSEBENCH_ROOT`
+(default `~/data/musebench`). Shard bytes, extracted audio, manifests with local paths, leak
+maps, scores and reports stay there. **Nothing derived from MuseBench is committed to this
+repository**; only the scripts are.
+
+Acquire the cohort (byte-range index, deterministic selection, resumable download, checks):
+
+```bash
+python scripts/musebench/index_shards.py --root ~/data/musebench --workers 75
+python scripts/musebench/verify.py --root ~/data/musebench index
+python scripts/musebench/select.py plan --root ~/data/musebench --budget-gb 170 --free-floor-gb 80
+python scripts/musebench/fetch.py --root ~/data/musebench --workers 16 --free-floor-gb 80
+python scripts/musebench/select.py manifest --root ~/data/musebench
+python scripts/musebench/verify.py --root ~/data/musebench acquire
+```
+
+Mark the rows the detector under test may have seen in training. The references file describes
+that detector's training pool and stays in the data root:
+
+```bash
+python scripts/musebench/leak_map.py --root ~/data/musebench --references ~/data/musebench/leak/references.json
+python scripts/musebench/verify.py --root ~/data/musebench leak
+```
+
+Score the eval cohort, then build and verify the report (seen and unseen rows are reported
+separately):
+
+```bash
+python scripts/musebench/select.py eval-manifest --root ~/data/musebench
+python -m artifactbench.bench --model artifactnet \
+    --manifest ~/data/musebench/manifests/musebench_eval_manifest.json \
+    --split all --n-per-source 0 --n-codec-pair 0 --device cuda \
+    --output ~/data/musebench/results/artifactnet
+python scripts/musebench/report.py --root ~/data/musebench
+python scripts/musebench/verify.py --root ~/data/musebench all
+```
+
+Any `--model` choice of the runner works the same way; a detector of your own plugs in as shown in
+[Using your own detector](#using-your-own-detector). Scores from externally run detectors go
+through `scripts/musebench/import_scores.py` (see [docs/MUSEBENCH.md](docs/MUSEBENCH.md)). No
+MuseBench scores are published in this repository.
+
 ## Evaluation protocol
 
 The v2 publication protocol adds analysis scripts to the versioned release:
@@ -229,7 +278,7 @@ python scripts/check_docs.py
 
 Tests marked `slow` need network access, model weights, or inference, and are
 not run in CI; run them with `python -m pytest -m slow`. `check_docs.py` checks
-that every relative link in `README.md`, `NOTICE.md`, `docs/*.md` and
+that every relative link in `README.md`, `NOTICE.md`, `RESULTS_8WAY.md`, `docs/*.md` and
 `paper/README.md` resolves, and that every `--flag` in a documented
 `python -m ...` or `python scripts/....py` command is accepted by that program.
 Use `python scripts/check_docs.py --skip-flags` to check links only.
