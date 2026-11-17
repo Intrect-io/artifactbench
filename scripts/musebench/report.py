@@ -4,7 +4,7 @@
 #          human FPR, FMA-OOD accuracy, per-generator / co-created / per-transform FNR and
 #          AUROC at a fixed threshold, each for all, seen and unseen rows.
 # Dependencies: standard library only.
-# Test Status: tests/test_musebench_report.py
+# Test Status: tests/test_musebench_report.py, tests/test_musebench_cohort.py
 """Build ``musebench_report.json`` and ``musebench_report.md`` from a bench run.
 
 Inputs: the eval manifest (with ``seen_in_training`` from leak_map.py) and the run directory
@@ -33,7 +33,13 @@ import os  # noqa: E402
 import sys  # noqa: E402
 import time  # noqa: E402
 from collections import Counter, defaultdict  # noqa: E402
+import importlib.util  # noqa: E402
 from pathlib import Path  # noqa: E402
+
+# cohort.py by file path: this directory is not on sys.path when the script runs (see above).
+_spec = importlib.util.spec_from_file_location("musebench_cohort", Path(__file__).with_name("cohort.py"))
+cohort = importlib.util.module_from_spec(_spec)
+_spec.loader.exec_module(cohort)
 
 DEFAULT_ROOT = Path(os.environ.get("MUSEBENCH_ROOT", "~/data/musebench")).expanduser()
 EVAL_MANIFEST_REL = Path("manifests") / "musebench_eval_manifest.json"
@@ -332,6 +338,23 @@ def full_markdown(full: dict, title: str) -> str:
     return "\n".join(lines[:2] + head + lines[2:] + sens)
 
 
+def select_cohort(eval_rows: list[dict], cohort_path: Path | None, run_dir: Path) -> tuple[list[dict], dict | None]:
+    """Restrict to --cohort. A run imported for a cohort must be reported on that same cohort (sha256), so a
+    pilot run cannot be reported as if it covered the whole eval set and vice versa."""
+    rm_path = run_dir / "run_manifest.json"
+    run_cohort = json.loads(rm_path.read_text(encoding="utf-8")).get("cohort") if rm_path.exists() else None
+    if cohort_path is None:
+        if run_cohort:
+            raise ValueError(f"the run was imported for cohort {run_cohort['sha256'][:12]} "
+                             f"({run_cohort['size']} rows); pass --cohort")
+        return eval_rows, None
+    ids = cohort.load(cohort_path)
+    info = cohort.info(cohort_path, ids)
+    if run_cohort and run_cohort["sha256"] != info["sha256"]:
+        raise ValueError(f"--cohort {info['sha256'][:12]} differs from the run's cohort {run_cohort['sha256'][:12]}")
+    return cohort.restrict(eval_rows, ids), info
+
+
 def main(argv: list[str] | None = None) -> int:
     ap = argparse.ArgumentParser(description="Build the MuseBench report from a bench run.")
     ap.add_argument("--root", type=Path, default=DEFAULT_ROOT)
@@ -343,11 +366,21 @@ def main(argv: list[str] | None = None) -> int:
                     help="row field that splits seen/unseen, e.g. seen_in_training_<key> from "
                          "leak_map.py --model-key (joined from the runtime manifest when the eval "
                          "manifest lacks it)")
+    ap.add_argument("--cohort", type=Path, default=None,
+                    help="JSON list of track ids (or {\"track_ids\": [...]}): report only these eval rows; "
+                         "coverage is relative to the cohort and run.cohort records its size and sha256")
     args = ap.parse_args(argv)
     run_dir = args.run_dir or args.root / "results" / "artifactnet_v94"
     eval_rows = json.loads((args.root / EVAL_MANIFEST_REL).read_text(encoding="utf-8"))["tracks"]
     eval_rows = attach_seen_field(eval_rows, args.root, args.seen_field)
+    try:
+        eval_rows, cohort_info = select_cohort(eval_rows, args.cohort, run_dir)
+    except ValueError as exc:
+        print(f"report: {exc}", file=sys.stderr)
+        return 2
     full = build_full_report(eval_rows, run_dir, args.model_dir, seen_field=args.seen_field)
+    if cohort_info is not None:
+        full["run"]["cohort"] = cohort_info
     full["run"]["created_at"] = time.strftime("%Y-%m-%dT%H:%M:%SZ", time.gmtime())
     atomic_write(run_dir / "musebench_report.json", json.dumps(full, indent=1) + "\n")
     atomic_write(run_dir / "musebench_report.md", full_markdown(full, args.title) + "\n")
